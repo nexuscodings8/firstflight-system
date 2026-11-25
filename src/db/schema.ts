@@ -1,0 +1,419 @@
+// FIRST FLIGHT BEST TRAVEL SOLUTION LTD: one shared database for the website and every portal.
+// Each record has a unique id; links between departments are real foreign keys.
+import { relations, sql } from "drizzle-orm";
+import {
+  boolean, index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex,
+} from "drizzle-orm/pg-core";
+
+const id = () => text("id").primaryKey().$defaultFn(() => crypto.randomUUID());
+const created = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
+const updated = () => timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date());
+
+// ---------- enums ----------
+export const role = pgEnum("role", ["CLIENT", "CONSULTANT", "FINANCE", "ADMIN", "CONTENT_MANAGER"]);
+export const publishStatus = pgEnum("publish_status", ["DRAFT", "PUBLISHED", "ARCHIVED"]);
+export const employmentType = pgEnum("employment_type", ["FULL_TIME", "PART_TIME", "CONTRACT", "SEASONAL", "TEMPORARY"]);
+export const payPeriod = pgEnum("pay_period", ["HOUR", "DAY", "WEEK", "MONTH", "YEAR"]);
+export const availability = pgEnum("availability", ["OPEN", "CLOSING_SOON", "CLOSED", "FILLED"]);
+export const studyLevel = pgEnum("study_level", ["FOUNDATION", "CERTIFICATE", "DIPLOMA", "BACHELOR", "MASTER", "PHD", "LANGUAGE"]);
+export const billingPeriod = pgEnum("billing_period", ["YEAR", "SEMESTER", "TERM", "MONTH", "FULL_PROGRAM"]);
+export const reviewState = pgEnum("review_state", ["CURRENT", "NEEDS_REVIEW"]);
+export const serviceType = pgEnum("service_type", ["WORK", "STUDY", "VISA"]);
+export const stage = pgEnum("stage", ["SUBMITTED", "ELIGIBILITY_REVIEW", "INITIAL_PAYMENT", "DOCUMENT_SIGNING", "PROCESSING", "FINAL_COLLECTION", "COMPLETED"]);
+export const applicationStatus = pgEnum("application_status", ["ACTIVE", "COMPLETED", "NOT_ELIGIBLE", "UNSUCCESSFUL", "WITHDRAWN"]);
+export const checklistState = pgEnum("checklist_state", ["PENDING", "REQUESTED", "UPLOADED", "VERIFIED", "REJECTED"]);
+export const updateVisibility = pgEnum("update_visibility", ["CLIENT", "INTERNAL"]);
+export const enquiryType = pgEnum("enquiry_type", ["PROGRAM_GUIDANCE", "VISA_CONSULTATION", "JOB_QUESTION", "GENERAL", "CHATBOT_HANDOFF"]);
+export const enquiryStatus = pgEnum("enquiry_status", ["NEW", "IN_PROGRESS", "CLOSED"]);
+export const invoiceStatus = pgEnum("invoice_status", ["DRAFT", "ISSUED", "PARTIALLY_PAID", "PAID", "VOID"]);
+export const paymentMethod = pgEnum("payment_method", ["CASH", "BANK_TRANSFER", "MOBILE_MONEY", "CARD"]);
+
+// ---------- people and access ----------
+export const users = pgTable("users", {
+  id: id(),
+  email: text("email").notNull().unique(),
+  name: text("name").notNull(),
+  phone: text("phone"),
+  passwordHash: text("password_hash").notNull(),
+  role: role("role").notNull().default("CLIENT"),
+  active: boolean("active").notNull().default(true),
+  createdAt: created(),
+  updatedAt: updated(),
+});
+
+// The cookie holds a random token; only its SHA-256 hash is stored here.
+export const sessions = pgTable("sessions", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: created(),
+}, (t) => [index("sessions_user_idx").on(t.userId)]);
+
+// ---------- catalogue: places ----------
+export const continents = pgTable("continents", {
+  id: id(),
+  name: text("name").notNull().unique(),
+  slug: text("slug").notNull().unique(),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+export const countries = pgTable("countries", {
+  id: id(),
+  name: text("name").notNull(),
+  isoCode: text("iso_code").notNull().unique(), // ISO 3166-1 alpha-2, same codes as the locations API
+  slug: text("slug").notNull().unique(),
+  continentId: text("continent_id").references(() => continents.id),
+  workDestination: boolean("work_destination").notNull().default(false),
+  studyDestination: boolean("study_destination").notNull().default(false),
+  blurb: text("blurb"),
+  status: publishStatus("status").notNull().default("PUBLISHED"),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+// ---------- catalogue: work abroad ----------
+export const jobCategories = pgTable("job_categories", {
+  id: id(),
+  name: text("name").notNull().unique(),
+  slug: text("slug").notNull().unique(),
+});
+
+export const jobs = pgTable("jobs", {
+  id: id(),
+  slug: text("slug").notNull().unique(),
+  title: text("title").notNull(),
+  countryId: text("country_id").notNull().references(() => countries.id),
+  location: text("location").notNull(),
+  categoryId: text("category_id").notNull().references(() => jobCategories.id),
+  employmentType: employmentType("employment_type").notNull(),
+  summary: text("summary").notNull(),
+  description: text("description").notNull(),
+  eligibility: text("eligibility").notNull(),
+  benefits: text("benefits").notNull(),
+  salaryMin: numeric("salary_min", { precision: 12, scale: 2 }),
+  salaryMax: numeric("salary_max", { precision: 12, scale: 2 }),
+  salaryCurrency: text("salary_currency").notNull().default("USD"),
+  salaryPeriod: payPeriod("salary_period").notNull().default("MONTH"),
+  deadline: timestamp("deadline", { withTimezone: true }),
+  availability: availability("availability").notNull().default("OPEN"),
+  status: publishStatus("status").notNull().default("DRAFT"),
+  featured: boolean("featured").notNull().default(false),
+  createdAt: created(),
+  updatedAt: updated(),
+}, (t) => [index("jobs_country_status_idx").on(t.countryId, t.status), index("jobs_category_idx").on(t.categoryId)]);
+
+// ---------- catalogue: study abroad ----------
+export const universities = pgTable("universities", {
+  id: id(),
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+  countryId: text("country_id").notNull().references(() => countries.id),
+  city: text("city").notNull(),
+  website: text("website"),
+  description: text("description").notNull(),
+  status: publishStatus("status").notNull().default("PUBLISHED"),
+}, (t) => [index("universities_country_idx").on(t.countryId)]);
+
+export const programs = pgTable("programs", {
+  id: id(),
+  slug: text("slug").notNull().unique(),
+  universityId: text("university_id").notNull().references(() => universities.id),
+  name: text("name").notNull(),
+  level: studyLevel("level").notNull(),
+  intakes: text("intakes").array().notNull().default(sql`'{}'::text[]`),
+  duration: text("duration").notNull(),
+  admission: text("admission").notNull(),
+  language: text("language").notNull(),
+  tuitionAmount: numeric("tuition_amount", { precision: 12, scale: 2 }),
+  tuitionCurrency: text("tuition_currency").notNull().default("USD"),
+  billingPeriod: billingPeriod("billing_period").notNull().default("YEAR"),
+  deadline: timestamp("deadline", { withTimezone: true }),
+  availability: availability("availability").notNull().default("OPEN"),
+  status: publishStatus("status").notNull().default("DRAFT"),
+  featured: boolean("featured").notNull().default(false),
+  createdAt: created(),
+  updatedAt: updated(),
+}, (t) => [index("programs_university_status_idx").on(t.universityId, t.status)]);
+
+// ---------- catalogue: visa processing ----------
+export const visaCategories = pgTable("visa_categories", {
+  id: id(),
+  name: text("name").notNull().unique(),
+  slug: text("slug").notNull().unique(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  active: boolean("active").notNull().default(true),
+});
+
+// Source-backed guidance kept by staff. Matching picks the most specific published entry for the
+// destination + purpose (nationality, residence, city). Missing, stale or flagged entries route to a consultation.
+export const visaGuidance = pgTable("visa_guidance", {
+  id: id(),
+  destinationIso: text("destination_iso").notNull(),
+  destinationCity: text("destination_city"), // null: whole country
+  categoryId: text("category_id").notNull().references(() => visaCategories.id),
+  nationalityIso: text("nationality_iso"), // null: any passport
+  residenceIso: text("residence_iso"), // null: any country of residence
+  title: text("title").notNull(),
+  summary: text("summary").notNull(),
+  processingTime: text("processing_time"),
+  feeNote: text("fee_note"),
+  localGuidance: text("local_guidance"), // e.g. where to submit biometrics in this city
+  sourceName: text("source_name").notNull(),
+  sourceUrl: text("source_url").notNull(),
+  lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }).notNull(),
+  reviewState: reviewState("review_state").notNull().default("CURRENT"),
+  status: publishStatus("status").notNull().default("DRAFT"),
+  updatedById: text("updated_by_id").references(() => users.id),
+  updatedAt: updated(),
+}, (t) => [index("visa_guidance_lookup_idx").on(t.destinationIso, t.categoryId, t.status)]);
+
+// Document checklist templates shared by jobs, programs and visa guidance.
+export const requirementItems = pgTable("requirement_items", {
+  id: id(),
+  label: text("label").notNull(),
+  mandatory: boolean("mandatory").notNull().default(true),
+  note: text("note"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  jobId: text("job_id").references(() => jobs.id, { onDelete: "cascade" }),
+  programId: text("program_id").references(() => programs.id, { onDelete: "cascade" }),
+  visaGuidanceId: text("visa_guidance_id").references(() => visaGuidance.id, { onDelete: "cascade" }),
+});
+
+// ---------- applications and enquiries ----------
+export const applications = pgTable("applications", {
+  id: id(),
+  reference: text("reference").notNull().unique(), // FF-WA-2026-0001
+  service: serviceType("service").notNull(),
+  clientId: text("client_id").notNull().references(() => users.id),
+  consultantId: text("consultant_id").references(() => users.id),
+  jobId: text("job_id").references(() => jobs.id),
+  programId: text("program_id").references(() => programs.id),
+  visaGuidanceId: text("visa_guidance_id").references(() => visaGuidance.id),
+  selection: jsonb("selection").notNull(), // snapshot of the client's choice at submission
+  clientNote: text("client_note"),
+  stage: stage("stage").notNull().default("SUBMITTED"),
+  status: applicationStatus("status").notNull().default("ACTIVE"),
+  createdAt: created(),
+  updatedAt: updated(),
+}, (t) => [index("applications_client_idx").on(t.clientId), index("applications_consultant_idx").on(t.consultantId), index("applications_status_stage_idx").on(t.status, t.stage)]);
+
+export const checklistItems = pgTable("checklist_items", {
+  id: id(),
+  applicationId: text("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  label: text("label").notNull(),
+  mandatory: boolean("mandatory").notNull().default(true),
+  state: checklistState("state").notNull().default("PENDING"),
+  note: text("note"), // consultant's request or rejection reason, shown to the client
+  requestedById: text("requested_by_id").references(() => users.id),
+  sortOrder: integer("sort_order").notNull().default(0),
+  updatedAt: updated(),
+}, (t) => [index("checklist_application_idx").on(t.applicationId)]);
+
+export const documents = pgTable("documents", {
+  id: id(),
+  applicationId: text("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  checklistItemId: text("checklist_item_id").references(() => checklistItems.id, { onDelete: "set null" }),
+  uploadedById: text("uploaded_by_id").notNull().references(() => users.id),
+  fileName: text("file_name").notNull(),
+  mimeType: text("mime_type").notNull(),
+  size: integer("size").notNull(),
+  storageKey: text("storage_key").notNull().unique(), // opaque key; never a public URL
+  createdAt: created(),
+}, (t) => [index("documents_application_idx").on(t.applicationId)]);
+
+export const applicationUpdates = pgTable("application_updates", {
+  id: id(),
+  applicationId: text("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  authorId: text("author_id").notNull().references(() => users.id),
+  body: text("body").notNull(),
+  visibility: updateVisibility("visibility").notNull().default("CLIENT"),
+  createdAt: created(),
+}, (t) => [index("updates_application_idx").on(t.applicationId)]);
+
+export const enquiries = pgTable("enquiries", {
+  id: id(),
+  reference: text("reference").notNull().unique(),
+  type: enquiryType("type").notNull(),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  phone: text("phone"),
+  message: text("message").notNull(),
+  context: jsonb("context"), // carried selections: program, university, visa inputs, page
+  clientId: text("client_id").references(() => users.id),
+  assignedToId: text("assigned_to_id").references(() => users.id),
+  status: enquiryStatus("status").notNull().default("NEW"),
+  createdAt: created(),
+  updatedAt: updated(),
+}, (t) => [index("enquiries_status_idx").on(t.status)]);
+
+// ---------- finance ----------
+export const invoices = pgTable("invoices", {
+  id: id(),
+  number: text("number").notNull().unique(),
+  applicationId: text("application_id").notNull().references(() => applications.id),
+  description: text("description").notNull(),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  currency: text("currency").notNull().default("USD"),
+  dueDate: timestamp("due_date", { withTimezone: true }),
+  status: invoiceStatus("status").notNull().default("ISSUED"),
+  createdById: text("created_by_id").notNull().references(() => users.id),
+  createdAt: created(),
+}, (t) => [index("invoices_application_idx").on(t.applicationId)]);
+
+export const payments = pgTable("payments", {
+  id: id(),
+  invoiceId: text("invoice_id").notNull().references(() => invoices.id),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  method: paymentMethod("method").notNull(),
+  reference: text("reference").notNull().unique(), // bank / mobile money reference: blocks duplicates
+  receiptNumber: text("receipt_number").notNull().unique(),
+  paidAt: timestamp("paid_at", { withTimezone: true }).notNull(),
+  recordedById: text("recorded_by_id").notNull().references(() => users.id),
+  createdAt: created(),
+}, (t) => [index("payments_invoice_idx").on(t.invoiceId)]);
+
+// ---------- activity and notifications ----------
+export const activities = pgTable("activities", {
+  id: id(),
+  actorId: text("actor_id").references(() => users.id),
+  action: text("action").notNull(), // application.submitted, document.requested, payment.recorded, ...
+  entityType: text("entity_type").notNull(),
+  entityId: text("entity_id").notNull(),
+  applicationId: text("application_id").references(() => applications.id, { onDelete: "set null" }),
+  summary: text("summary").notNull(),
+  changes: jsonb("changes"),
+  createdAt: created(),
+}, (t) => [index("activities_application_idx").on(t.applicationId), index("activities_created_idx").on(t.createdAt)]);
+
+export const notifications = pgTable("notifications", {
+  id: id(),
+  userId: text("user_id").references(() => users.id, { onDelete: "cascade" }), // a person...
+  role: role("role"), // ...or a whole department
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  link: text("link"),
+  readAt: timestamp("read_at", { withTimezone: true }),
+  createdAt: created(),
+}, (t) => [index("notifications_user_idx").on(t.userId, t.readAt), index("notifications_role_idx").on(t.role, t.readAt)]);
+
+// ---------- website content ----------
+export const promotions = pgTable("promotions", {
+  id: id(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  ctaLabel: text("cta_label").notNull(),
+  ctaUrl: text("cta_url").notNull(),
+  startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  status: publishStatus("status").notNull().default("DRAFT"),
+  createdAt: created(),
+});
+
+export const portfolioEntries = pgTable("portfolio_entries", {
+  id: id(),
+  title: text("title").notNull(),
+  summary: text("summary").notNull(),
+  year: integer("year"),
+  status: publishStatus("status").notNull().default("DRAFT"),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+export const testimonials = pgTable("testimonials", {
+  id: id(),
+  clientName: text("client_name").notNull(),
+  service: serviceType("service").notNull(),
+  quote: text("quote").notNull(),
+  consentGiven: boolean("consent_given").notNull().default(false),
+  status: publishStatus("status").notNull().default("DRAFT"),
+  createdAt: created(),
+});
+
+export const newsPosts = pgTable("news_posts", {
+  id: id(),
+  slug: text("slug").notNull().unique(),
+  title: text("title").notNull(),
+  excerpt: text("excerpt").notNull(),
+  body: text("body").notNull(),
+  publishedAt: timestamp("published_at", { withTimezone: true }),
+  status: publishStatus("status").notNull().default("DRAFT"),
+});
+
+export const whatsappContacts = pgTable("whatsapp_contacts", {
+  id: id(),
+  name: text("name").notNull(),
+  department: text("department").notNull(),
+  number: text("number").notNull(), // international digits only, e.g. 250792881863
+  active: boolean("active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+// Running counters for readable references (FF-WA-2026-0001, INV-2026-0001, RC-2026-0001).
+export const counters = pgTable("counters", {
+  key: text("key").primaryKey(),
+  value: integer("value").notNull().default(0),
+}, (t) => [uniqueIndex("counters_key_idx").on(t.key)]);
+
+// ---------- relations (for typed nested queries) ----------
+export const usersRelations = relations(users, ({ many }) => ({
+  applications: many(applications, { relationName: "client" }),
+  assigned: many(applications, { relationName: "consultant" }),
+}));
+export const continentsRelations = relations(continents, ({ many }) => ({ countries: many(countries) }));
+export const countriesRelations = relations(countries, ({ one, many }) => ({
+  continent: one(continents, { fields: [countries.continentId], references: [continents.id] }),
+  jobs: many(jobs),
+  universities: many(universities),
+}));
+export const jobCategoriesRelations = relations(jobCategories, ({ many }) => ({ jobs: many(jobs) }));
+export const jobsRelations = relations(jobs, ({ one, many }) => ({
+  country: one(countries, { fields: [jobs.countryId], references: [countries.id] }),
+  category: one(jobCategories, { fields: [jobs.categoryId], references: [jobCategories.id] }),
+  requirements: many(requirementItems),
+}));
+export const universitiesRelations = relations(universities, ({ one, many }) => ({
+  country: one(countries, { fields: [universities.countryId], references: [countries.id] }),
+  programs: many(programs),
+}));
+export const programsRelations = relations(programs, ({ one, many }) => ({
+  university: one(universities, { fields: [programs.universityId], references: [universities.id] }),
+  requirements: many(requirementItems),
+}));
+export const visaCategoriesRelations = relations(visaCategories, ({ many }) => ({ guidance: many(visaGuidance) }));
+export const visaGuidanceRelations = relations(visaGuidance, ({ one, many }) => ({
+  category: one(visaCategories, { fields: [visaGuidance.categoryId], references: [visaCategories.id] }),
+  requirements: many(requirementItems),
+}));
+export const requirementItemsRelations = relations(requirementItems, ({ one }) => ({
+  job: one(jobs, { fields: [requirementItems.jobId], references: [jobs.id] }),
+  program: one(programs, { fields: [requirementItems.programId], references: [programs.id] }),
+  visaGuidance: one(visaGuidance, { fields: [requirementItems.visaGuidanceId], references: [visaGuidance.id] }),
+}));
+export const applicationsRelations = relations(applications, ({ one, many }) => ({
+  client: one(users, { fields: [applications.clientId], references: [users.id], relationName: "client" }),
+  consultant: one(users, { fields: [applications.consultantId], references: [users.id], relationName: "consultant" }),
+  job: one(jobs, { fields: [applications.jobId], references: [jobs.id] }),
+  program: one(programs, { fields: [applications.programId], references: [programs.id] }),
+  visaGuidance: one(visaGuidance, { fields: [applications.visaGuidanceId], references: [visaGuidance.id] }),
+  checklist: many(checklistItems),
+  documents: many(documents),
+  updates: many(applicationUpdates),
+  invoices: many(invoices),
+}));
+export const checklistItemsRelations = relations(checklistItems, ({ one, many }) => ({
+  application: one(applications, { fields: [checklistItems.applicationId], references: [applications.id] }),
+  documents: many(documents),
+}));
+export const documentsRelations = relations(documents, ({ one }) => ({
+  application: one(applications, { fields: [documents.applicationId], references: [applications.id] }),
+  checklistItem: one(checklistItems, { fields: [documents.checklistItemId], references: [checklistItems.id] }),
+}));
+export const applicationUpdatesRelations = relations(applicationUpdates, ({ one }) => ({
+  application: one(applications, { fields: [applicationUpdates.applicationId], references: [applications.id] }),
+  author: one(users, { fields: [applicationUpdates.authorId], references: [users.id] }),
+}));
+export const invoicesRelations = relations(invoices, ({ one, many }) => ({
+  application: one(applications, { fields: [invoices.applicationId], references: [applications.id] }),
+  payments: many(payments),
+}));
+export const paymentsRelations = relations(payments, ({ one }) => ({
+  invoice: one(invoices, { fields: [payments.invoiceId], references: [invoices.id] }),
+}));
