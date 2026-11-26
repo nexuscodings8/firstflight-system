@@ -13,6 +13,7 @@ export const metadata = { title: "Enquiries" };
 function contextPairs(ctx: unknown): [string, string][] {
   if (!ctx || typeof ctx !== "object") return [];
   const c = ctx as Record<string, unknown>, out: [string, string][] = [];
+  if (c.flight && typeof c.flight === "object") for (const [k, v] of Object.entries(c.flight as Record<string, unknown>)) if (typeof v === "string" && v) out.push([k[0].toUpperCase() + k.slice(1), v]);
   if (c.source === "assistant") out.push(["Via", "Website assistant"]);
   if (typeof c.page === "string" && c.page) out.push(["From page", c.page]);
   for (const [k, l] of [["program", "Program"], ["university", "University"], ["job", "Job"], ["country", "Country"]] as const) if (typeof c[k] === "string") out.push([l, c[k] as string]);

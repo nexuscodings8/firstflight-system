@@ -3,7 +3,7 @@ import { db, schema as s } from "@/db";
 import { nextRef } from "./refs";
 import { logActivity, notify } from "./activity";
 
-export type EnquiryInput = { type: "PROGRAM_GUIDANCE" | "VISA_CONSULTATION" | "JOB_QUESTION" | "GENERAL"; name: string; email: string; phone?: string; message: string };
+export type EnquiryInput = { type: "PROGRAM_GUIDANCE" | "VISA_CONSULTATION" | "JOB_QUESTION" | "GENERAL" | "FLIGHT_BOOKING"; name: string; email: string; phone?: string; message: string };
 
 /** Saves an enquiry, records it and tells the consultants. Returns its reference (EQ-2026-0001). */
 export async function createEnquiry(data: EnquiryInput, context: unknown, user: { id: string; role: string } | null, via = "the website") {

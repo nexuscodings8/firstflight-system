@@ -23,3 +23,7 @@ describe("assistant understanding", () => {
     expect(findLevel("bachelor degree")).toBe("BACHELOR");
   });
 });
+
+describe("assistant flights", () => {
+  it.each([["How much is a flight to Dubai?", "flights"], ["I need air tickets", "flights"]])("%s → %s", (m, i) => expect(detectIntent(m)).toBe(i));
+});

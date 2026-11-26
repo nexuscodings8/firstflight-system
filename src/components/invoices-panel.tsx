@@ -1,5 +1,8 @@
 import Link from "next/link";
 import { issueInvoice, recordPayment, voidInvoice } from "@/app/staff/finance/actions";
+import { applyFeePlan, removeFeePlan } from "@/app/staff/finance/fee-actions";
+import type { FeePlan, Installment } from "@/lib/fees";
+import { nowMs } from "@/lib/finance";
 import { CURRENCIES, PAYMENT_METHOD_LABEL, balanceOf, fromCents } from "@/lib/finance";
 import { date, label, money } from "@/lib/format";
 import type { FullApplication } from "@/lib/applications";
@@ -13,19 +16,80 @@ export const INVOICE_BADGE: Record<string, string> = {
  * Invoices on one application.
  * mode "client": own invoices with links; "finance": plus issue/record/void; "summary": totals only (consultants).
  */
-export function InvoicesPanel({ app, mode }: { app: FullApplication; mode: "client" | "finance" | "summary" }) {
+type RuleChoice = { id: string; name: string; amount: string; currency: string; installments: unknown };
+
+/** Consultants see whether each instalment is cleared, never amounts or payment details. */
+function Clearance({ app }: { app: FullApplication }) {
+  const invs = app.invoices.filter((i) => i.status !== "VOID").sort((a, b) => +a.createdAt - +b.createdAt);
+  const now = nowMs();
+  const state = (i: (typeof invs)[number]) => i.status === "PAID" ? ["Cleared", "bg-emerald-50 text-emerald-700"] : i.dueDate && +i.dueDate < now ? ["Overdue", "bg-red-50 text-red-700"] : i.status === "PARTIALLY_PAID" ? ["Part paid", "bg-blue-50 text-brand"] : ["Not paid yet", "bg-amber-50 text-amber-800"];
+  return (
+    <section className="card p-6" aria-labelledby="clr-h">
+      <h2 id="clr-h" className="text-xl">Payment clearance</h2>
+      <p className="mt-1 text-sm muted">Amounts and payment details are kept with Finance. You&apos;re notified when a payment is recorded.</p>
+      {invs.length ? <ul className="mt-3 divide-y divide-line">{invs.map((i) => { const [t, c] = state(i); return <li key={i.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm"><span>{i.description}{i.dueDate ? <span className="muted"> · due {date(i.dueDate)}</span> : null}</span><span className={`badge ${c}`}>{t}</span></li>; })}</ul>
+        : <p className="mt-2 text-sm muted">No fees issued yet.</p>}
+      {invs.length > 0 && <p className="mt-3 text-sm font-semibold">{invs.every((i) => i.status === "PAID") ? "All issued fees are cleared." : "Some fees are not cleared yet."}</p>}
+    </section>
+  );
+}
+
+function FeePlanBox({ app, rules, finance }: { app: FullApplication; rules: RuleChoice[]; finance: boolean }) {
+  const plan = app.feePlan as FeePlan | null;
+  if (plan) {
+    const paid = app.invoices.filter((i) => plan.installments.some((x) => x.invoiceId === i.id)).reduce((n, i) => n + balanceOf(i).paid, 0);
+    const total = Math.round(Number(plan.amount) * 100);
+    const refunded = app.refunds.filter((r) => r.status === "PAID" && plan.installments.some((x) => x.invoiceId === r.invoiceId)).reduce((n, r) => n + Math.round(Number(r.paidAmount) * 100), 0);
+    return (
+      <div className="mt-3 rounded-xl bg-mist p-4">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div><p className="text-xs muted">Service fee{finance ? ` (${plan.ruleName})` : ""}</p><p className="font-display text-xl font-extrabold">{money(plan.amount, plan.currency)}</p></div>
+          <div><p className="text-xs muted">Paid</p><p className="font-display text-xl font-extrabold text-emerald-700">{money(fromCents(paid), plan.currency)}</p></div>
+          <div><p className="text-xs muted">Remaining</p><p className="font-display text-xl font-extrabold">{money(fromCents(Math.max(total - paid, 0)), plan.currency)}</p></div>
+        </div>
+        {refunded > 0 && <p className="mt-2 text-sm font-semibold">Refunded: {money(fromCents(refunded), plan.currency)}</p>}
+        <p className="mt-2 text-xs muted">Agreed on {date(new Date(plan.appliedAt))} in {plan.installments.length} instalment{plan.installments.length === 1 ? "" : "s"}; this price doesn&apos;t change if fees change later.</p>
+        {finance && (
+          <details className="mt-2"><summary className="cursor-pointer text-xs text-red-700">Remove this fee plan</summary>
+            <ActionForm action={removeFeePlan} submit="Remove and void its invoices" className="mt-2 flex flex-wrap items-start gap-2" buttonClass="btn-ghost btn-sm">
+              <input type="hidden" name="applicationId" value={app.id} />
+              <label className="sr-only" htmlFor="rm-fp">Reason</label><input id="rm-fp" name="reason" required placeholder="Reason (e.g. wrong fee chosen)" className="input min-h-9 flex-1 py-1.5 text-sm" />
+            </ActionForm>
+          </details>
+        )}
+      </div>
+    );
+  }
+  if (!finance || app.status !== "ACTIVE") return null;
+  return (
+    <div className="mt-3 rounded-xl border-2 border-dashed border-brand/30 p-4">
+      <h3 className="text-base">Apply a fee plan</h3>
+      {rules.length ? (
+        <ActionForm action={applyFeePlan} submit="Apply fee plan and issue invoices" pendingLabel="Applying…" className="mt-2 grid gap-2">
+          <input type="hidden" name="applicationId" value={app.id} />
+          <label className="label" htmlFor="fp-rule">Fee (most specific first)</label>
+          <select id="fp-rule" name="ruleId" className="input" defaultValue={rules[0].id}>{rules.map((r) => <option key={r.id} value={r.id}>{r.name}: {money(r.amount, r.currency)}, {(r.installments as Installment[]).map((x) => `${x.percent}%`).join(" / ")}</option>)}</select>
+        </ActionForm>
+      ) : <p className="mt-1 text-sm muted">No fee applies to this application yet. <Link className="font-semibold text-brand underline" href="/staff/finance/fees">Set up service fees</Link>, or issue an invoice by hand below.</p>}
+    </div>
+  );
+}
+
+export function InvoicesPanel({ app, mode, rules = [] }: { app: FullApplication; mode: "client" | "finance" | "summary"; rules?: RuleChoice[] }) {
+  if (mode === "summary") return <Clearance app={app} />;
   const invs = [...app.invoices].sort((a, b) => +a.createdAt - +b.createdAt);
   const open = invs.filter((i) => i.status !== "VOID");
   const byCur = new Map<string, number>();
   for (const i of open) byCur.set(i.currency, (byCur.get(i.currency) ?? 0) + balanceOf(i).due);
   const dueText = [...byCur].filter(([, c]) => c > 0).map(([cur, c]) => money(fromCents(c), cur)).join(" + ");
-  const links = mode !== "summary";
+  const links = true;
   return (
     <section className="card p-6" aria-labelledby="inv-h">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 id="inv-h" className="text-xl">Invoices and payments</h2>
         {open.length > 0 && <p className="text-sm font-semibold">{dueText ? <>Balance due: <span className="text-amber-800">{dueText}</span></> : <span className="text-emerald-700">Fully paid</span>}</p>}
       </div>
+      <FeePlanBox app={app} rules={rules} finance={mode === "finance"} />
       {!invs.length && <p className="mt-2 text-sm muted">{mode === "client" ? "No invoices yet. Finance will issue them when your file moves to payment." : "No invoices on this application yet."}</p>}
       <ul className="mt-3 divide-y divide-line">
         {invs.map((inv) => {
@@ -73,7 +137,7 @@ export function InvoicesPanel({ app, mode }: { app: FullApplication; mode: "clie
       </ul>
       {mode === "finance" && app.status !== "WITHDRAWN" && (
         <div className="mt-4 rounded-xl bg-mist p-4">
-          <h3 className="text-base">Issue a new invoice</h3>
+          <h3 className="text-base">Issue a separate invoice</h3>
           <ActionForm action={issueInvoice} submit="Issue invoice" pendingLabel="Issuing…" className="mt-3 grid gap-3 sm:grid-cols-2">
             <input type="hidden" name="applicationId" value={app.id} />
             <div className="sm:col-span-2"><label className="label" htmlFor="in-desc">What it is for</label><input id="in-desc" name="description" className="input" placeholder={`e.g. Instalment ${invs.filter((i) => i.status !== "VOID").length + 1}: processing fee`} required maxLength={200} /></div>

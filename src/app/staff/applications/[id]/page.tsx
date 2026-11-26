@@ -8,9 +8,16 @@ import { loadApplication } from "@/lib/applications";
 import { dateTime } from "@/lib/format";
 import { ApplicationView } from "@/components/application-view";
 import { InvoicesPanel } from "@/components/invoices-panel";
+import { RequestsPanel } from "@/components/requests-panel";
+import { matchingRules } from "@/lib/fees";
+import { scopeOf } from "@/lib/fee-scope";
 import { ProgressForm, RequestDocumentForm, ReviewControls, UpdateForm } from "@/components/case-tools";
 
 export const metadata = { title: "Application" };
+
+// Consultants see that finance work happened, never the amounts or references.
+const FINANCIAL = /^(fee|invoice|payment|refund)\./;
+const GENERIC: Record<string, string> = { fee: "set up the service fee plan", invoice: "updated an invoice", payment: "recorded a payment", refund: "updated a refund request" };
 
 export default async function StaffApplication({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -19,6 +26,7 @@ export default async function StaffApplication({ params }: { params: Promise<{ i
   if (!app || !canViewApplication(user, app)) notFound();
   const work = canWorkOnCase(user, app);
   const finance = canManageFinance(user);
+  const rules = finance ? matchingRules(await db.select().from(s.feeRules), await scopeOf(app)) : [];
   const history = await db.query.activities.findMany({ where: eq(s.activities.applicationId, app.id), orderBy: [desc(s.activities.createdAt)], limit: 40, with: { actor: { columns: { name: true } } } });
   return (
     <>
@@ -32,13 +40,14 @@ export default async function StaffApplication({ params }: { params: Promise<{ i
         updatesFooter={work ? <div className="mt-5 border-t border-line pt-4"><h3 className="mb-2 text-base">Post an update or note</h3><UpdateForm applicationId={app.id} /></div> : undefined}
       >
         <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
-          <InvoicesPanel app={app} mode={finance ? "finance" : "summary"} />
+          <InvoicesPanel app={app} mode={finance ? "finance" : "summary"} rules={rules} />
           {work && <section className="card p-6"><h2 className="mb-3 text-xl">Progress</h2><ProgressForm applicationId={app.id} stage={app.stage} status={app.status} /></section>}
         </div>
+        <RequestsPanel app={app} mode="staff" canDecide={work} seeRefunds={finance} />
         <section className="card p-6">
           <h2 className="text-xl">History</h2>
           <ol className="mt-3 space-y-2 text-sm">
-            {history.map((h) => <li key={h.id} className="flex flex-wrap gap-x-3 border-b border-line pb-2"><span className="w-40 shrink-0 muted">{dateTime(h.createdAt)}</span><span className="flex-1">{h.summary}</span></li>)}
+            {history.map((h) => <li key={h.id} className="flex flex-wrap gap-x-3 border-b border-line pb-2"><span className="w-40 shrink-0 muted">{dateTime(h.createdAt)}</span><span className="flex-1">{finance || !FINANCIAL.test(h.action) ? h.summary : `${h.actor?.name ?? "Finance"} ${GENERIC[h.action.split(".")[0]] ?? "updated payments"}`}</span></li>)}
           </ol>
           {!history.length && <p className="mt-2 text-sm muted">No activity recorded yet.</p>}
         </section>

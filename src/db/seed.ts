@@ -18,7 +18,7 @@ async function main() {
   await db.execute(sql`truncate table activities, notifications, payments, invoices, application_updates, documents,
     checklist_items, applications, enquiries, requirement_items, visa_guidance, visa_categories, programs, universities,
     jobs, job_categories, countries, continents, promotions, portfolio_entries, testimonials, news_posts, whatsapp_contacts,
-    counters, email_log, sessions, users restart identity cascade`);
+    counters, email_log, refund_requests, amendment_requests, fee_rules, sessions, users restart identity cascade`);
 
   // ---------- people ----------
   const hash = await bcrypt.hash(pw, 12);
@@ -179,6 +179,14 @@ async function main() {
     { name: "FIRST FLIGHT office", department: "General enquiries", number: "250792881863", sortOrder: 1 },
     { name: "FIRST FLIGHT office", department: "Work and study abroad", number: "250792870300", sortOrder: 2 },
     { name: "FIRST FLIGHT office", department: "Visa processing", number: "250787720747", sortOrder: 3 },
+  ]);
+
+  // ---------- sample service fees (private; Finance applies them to applications) ----------
+  await db.insert(s.feeRules).values([
+    { name: "Work placement (general)", service: "WORK" as const, amount: "1200.00", currency: "USD", installments: [{ label: "Deposit", percent: 40, dueDays: 0 }, { label: "Second instalment", percent: 30, dueDays: 30 }, { label: "Final balance", percent: 30, dueDays: 60 }], createdById: finance.id },
+    { name: "Netherlands work placement", service: "WORK" as const, countryId: ctry.NL.id, amount: "1500.00", currency: "EUR", installments: [{ label: "Deposit", percent: 40, dueDays: 0 }, { label: "On work permit approval", percent: 30, dueDays: 45 }, { label: "Before travel", percent: 30, dueDays: 90 }], createdById: finance.id },
+    { name: "Study admission support", service: "STUDY" as const, amount: "900.00", currency: "USD", installments: [{ label: "Application fee", percent: 50, dueDays: 0 }, { label: "On admission", percent: 50, dueDays: 60 }], createdById: finance.id },
+    { name: "Visa file preparation", service: "VISA" as const, amount: "150.00", currency: "USD", installments: [{ label: "Visa service fee", percent: 100, dueDays: 0 }], createdById: finance.id },
   ]);
 
   // ---------- one demo application for the demo client (already assigned) ----------

@@ -7,7 +7,7 @@ import { detectIntent, findCountry, findLevel, keywords } from "./intent";
 
 export type Reply = { text: string; links?: { label: string; href: string }[]; suggestions?: string[]; handoff?: boolean };
 
-const MENU = ["Find jobs abroad", "Study programs", "Visa requirements", "Talk to a consultant"];
+const MENU = ["Find jobs abroad", "Study programs", "Visa requirements", "Book a flight", "Talk to a consultant"];
 
 async function publishedCountries() {
   return db.select({ name: s.countries.name, iso: s.countries.isoCode, slug: s.countries.slug, work: s.countries.workDestination, study: s.countries.studyDestination })
@@ -20,6 +20,8 @@ export async function answer(message: string): Promise<Reply> {
   switch (intent) {
     case "greeting":
       return { text: "Hello! I'm the FIRST FLIGHT assistant. I can help you find jobs abroad, study programs and visa requirements, or put you in touch with a consultant. What are you looking for?", suggestions: MENU };
+    case "flights":
+      return { text: "We can find and book flights for you. Tell us your route, dates and travellers, and a consultant will send you options and prices. Nothing is booked until you confirm.", links: [{ label: "Request flight options", href: "/flights" }] };
     case "thanks":
       return { text: "You're welcome. Is there anything else I can help with?", suggestions: MENU };
     case "human":

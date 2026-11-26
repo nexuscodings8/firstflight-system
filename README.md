@@ -43,6 +43,14 @@ Website and connected portals for **FIRST FLIGHT BEST TRAVEL SOLUTION LTD**: Wor
 - **Hardening.** Wrong-password throttling (8 tries per account and address, then 15 minutes), enquiry and assistant limits, security headers, `robots.txt` and `sitemap.xml`.
 - **Launch checks** (`/staff/launch`, admin). Re-checks accounts, demo data, email, storage, the public address and content every time it is opened, with how to fix each item.
 
+## What's in Phase 5
+
+- **Private service fees** (`/staff/finance/fees`, Finance and Admin). A fee per service, optionally narrowed to a country, job, university, program or visa purpose, paid in one to three instalments (percentages adding to 100, due a set number of days after the plan is applied). On an application, Finance applies the most specific matching fee: one invoice per instalment is issued and the agreed plan is copied onto the application, so later fee changes never alter it. Fee changes are recorded with before/after values. Visitors never see fees; clients see only their own plan (total, paid, remaining, each instalment); consultants see only whether each instalment is cleared.
+- **Refunds in two steps** (`/staff/finance/refunds`). The client asks for a refund of a paid invoice → Finance/Admin approve (the refund form opens for the client) or decline → the client gives the amount (up to what was paid) and mobile money or bank details → Finance records the payout reference. Refunds appear in the monthly report with net totals.
+- **Change requests.** Clients ask to change their listing, details or dates; the assigned consultant (or an admin) approves or declines with a message that is posted to the application.
+- **Flight bookings** (`/flights`). Route (country and city), one-way or return dates, passengers and class become a flight enquiry for consultants; the assistant points flight questions there.
+- **Phone and tablet testing.** Every public page, the help panels, the client portal and the staff dashboard are checked on a phone (Pixel 7) and a tablet (iPad Mini) as well as desktop. The full menu shows from 1280px wide; below that, the compact menu is used.
+
 The roadmap is in `docs/ROADMAP.md`.
 
 ## Run locally

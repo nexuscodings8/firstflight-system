@@ -36,3 +36,15 @@
 - **Storage:** object storage for uploads.
 - **Live location data:** optional switch to a live provider.
 - **Launch:** checks, real content import and deployment.
+
+## Phase 5 (done): fees, refunds, changes, flights and device testing
+- **Fees:** private service fee rules with one to three instalments; fee plans applied per application as invoices, with the agreed price kept; audit of fee changes; clearance-only view for consultants.
+- **Refunds:** request → approval → refund form → payout, in the monthly report.
+- **Amendments:** client change requests decided by the consultant or admin.
+- **Flights:** flight booking requests as enquiries.
+- **Testing:** layout and navigation on phone and tablet sizes.
+
+## Still open
+- Replace sample content with FIRST FLIGHT's real listings, accounts and contacts (see Launch checks).
+- A separate test copy of the site, so sample data never sits on the live system.
+- Optional: a live country/city data provider instead of the built-in list.

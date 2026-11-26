@@ -3,7 +3,7 @@
 // else to a person, so it never invents visa rules or prices.
 
 export type Intent =
-  | "greeting" | "human" | "jobs" | "study" | "visa" | "fees" | "apply" | "track" | "documents" | "contact" | "thanks" | "unknown";
+  | "greeting" | "human" | "flights" | "jobs" | "study" | "visa" | "fees" | "apply" | "track" | "documents" | "contact" | "thanks" | "unknown";
 
 const has = (t: string, words: string[]) => words.some((w) => new RegExp(`(^|[^a-z])${w}`, "i").test(t));
 
@@ -12,6 +12,7 @@ export function detectIntent(raw: string): Intent {
   const t = raw.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "");
   if (!t.trim()) return "unknown";
   if (has(t, ["human", "person", "agent", "consultant", "staff", "someone", "real people", "call me", "speak to", "talk to"])) return "human";
+  if (has(t, ["flight", "flights", "ticket", "tickets", "airline", "fly to", "plane", "air ticket", "booking a flight"])) return "flights";
   if (has(t, ["price", "cost", "fee", "fees", "how much", "charge", "pay", "payment", "invoice", "tuition"])) return "fees";
   if (has(t, ["track", "status", "progress", "my application", "where is my", "update on"])) return "track";
   if (has(t, ["document", "papers", "checklist", "upload", "certificate", "passport copy"])) return "documents";

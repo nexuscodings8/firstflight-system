@@ -11,6 +11,8 @@ export default defineConfig({
   use: { baseURL: process.env.BASE_URL ?? "http://localhost:3000", launchOptions, trace: "retain-on-failure" },
   projects: [
     { name: "desktop", use: { ...devices["Desktop Chrome"] } },
-    { name: "mobile", use: { ...devices["Pixel 7"] }, testMatch: /navigation\.spec\.ts/ },
+    // Phones and tablets run the navigation and layout checks (the workflow tests run once, on desktop).
+    { name: "mobile", use: { ...devices["Pixel 7"] }, testMatch: /(navigation|responsive)\.spec\.ts/ },
+    { name: "tablet", use: { ...devices["iPad Mini"], browserName: "chromium" }, testMatch: /(navigation|responsive)\.spec\.ts/ },
   ],
 });

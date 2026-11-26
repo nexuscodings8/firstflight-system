@@ -27,7 +27,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
     <div className="grid gap-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h1 className="text-3xl">Finance</h1>
-        <Link href={`/staff/finance/report?month=${thisMonth}`} className="btn-primary btn-sm">Monthly payment report</Link>
+        <div className="flex flex-wrap gap-2"><Link href="/staff/finance/fees" className="btn-ghost btn-sm">Service fees</Link><Link href="/staff/finance/refunds" className="btn-ghost btn-sm">Refunds</Link><Link href={`/staff/finance/report?month=${thisMonth}`} className="btn-primary btn-sm">Monthly payment report</Link></div>
       </div>
       {show === "open" && <div className="card p-5"><p className="text-sm muted">Outstanding on open invoices</p><p className="font-display text-2xl font-extrabold">{[...outstanding].filter(([, c]) => c > 0).map(([cur, c]) => money(fromCents(c), cur)).join(" + ") || "Nothing outstanding"}</p></div>}
       <section className="card p-5">

@@ -8,6 +8,7 @@ export const NAV = [
   { href: "/work", label: "Work Abroad" },
   { href: "/study", label: "Study Abroad" },
   { href: "/visa", label: "Visa Processing" },
+  { href: "/flights", label: "Flights" },
   { href: "/news", label: "News" },
   { href: "/contact", label: "Contact" },
 ];
@@ -26,7 +27,7 @@ export async function SiteHeader() {
             <span className="block text-[11px] font-semibold tracking-[.16em] text-muted uppercase">Best Travel Solution Ltd</span>
           </span>
         </Link>
-        <nav aria-label="Main" className="ml-auto hidden items-center gap-1 lg:flex">
+        <nav aria-label="Main" className="ml-auto hidden items-center gap-1 whitespace-nowrap xl:flex">
           {NAV.map((n) => (
             <Link key={n.href} href={n.href} className="rounded-lg px-3 py-2 text-[15px] font-medium text-ink hover:bg-mist hover:text-brand">{n.label}</Link>
           ))}

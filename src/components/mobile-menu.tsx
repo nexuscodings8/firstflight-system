@@ -9,7 +9,7 @@ export function MobileMenu({ items, account, showRegister }: { items: { href: st
   const path = usePathname();
   useEffect(() => setOpen(false), [path]);
   return (
-    <div className="ml-auto lg:hidden">
+    <div className="ml-auto xl:hidden">
       <button type="button" className="btn-ghost btn-sm" aria-expanded={open} aria-controls="mobile-nav" onClick={() => setOpen((o) => !o)}>
         <Icon name={open ? "close" : "menu"} /> Menu
       </button>

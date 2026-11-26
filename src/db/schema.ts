@@ -23,7 +23,7 @@ export const stage = pgEnum("stage", ["SUBMITTED", "ELIGIBILITY_REVIEW", "INITIA
 export const applicationStatus = pgEnum("application_status", ["ACTIVE", "COMPLETED", "NOT_ELIGIBLE", "UNSUCCESSFUL", "WITHDRAWN"]);
 export const checklistState = pgEnum("checklist_state", ["PENDING", "REQUESTED", "UPLOADED", "VERIFIED", "REJECTED"]);
 export const updateVisibility = pgEnum("update_visibility", ["CLIENT", "INTERNAL"]);
-export const enquiryType = pgEnum("enquiry_type", ["PROGRAM_GUIDANCE", "VISA_CONSULTATION", "JOB_QUESTION", "GENERAL", "CHATBOT_HANDOFF"]);
+export const enquiryType = pgEnum("enquiry_type", ["PROGRAM_GUIDANCE", "VISA_CONSULTATION", "JOB_QUESTION", "GENERAL", "CHATBOT_HANDOFF", "FLIGHT_BOOKING"]);
 export const enquiryStatus = pgEnum("enquiry_status", ["NEW", "IN_PROGRESS", "CLOSED"]);
 export const invoiceStatus = pgEnum("invoice_status", ["DRAFT", "ISSUED", "PARTIALLY_PAID", "PAID", "VOID"]);
 export const paymentMethod = pgEnum("payment_method", ["CASH", "BANK_TRANSFER", "MOBILE_MONEY", "CARD"]);
@@ -191,6 +191,7 @@ export const applications = pgTable("applications", {
   visaGuidanceId: text("visa_guidance_id").references(() => visaGuidance.id),
   selection: jsonb("selection").notNull(), // snapshot of the client's choice at submission
   clientNote: text("client_note"),
+  feePlan: jsonb("fee_plan"), // agreed service fee and instalments, copied from the fee rule when applied (never changes afterwards)
   stage: stage("stage").notNull().default("SUBMITTED"),
   status: applicationStatus("status").notNull().default("ACTIVE"),
   createdAt: created(),
@@ -273,6 +274,70 @@ export const payments = pgTable("payments", {
   recordedById: text("recorded_by_id").notNull().references(() => users.id),
   createdAt: created(),
 }, (t) => [index("payments_invoice_idx").on(t.invoiceId)]);
+
+// Service fees: Finance/Admin set them per service, optionally narrowed to a country, job, university,
+// program or visa purpose. The most specific active rule is offered when a fee plan is applied to an application.
+export const feeRules = pgTable("fee_rules", {
+  id: id(),
+  name: text("name").notNull(),
+  service: serviceType("service").notNull(),
+  countryId: text("country_id").references(() => countries.id),
+  jobId: text("job_id").references(() => jobs.id),
+  universityId: text("university_id").references(() => universities.id),
+  programId: text("program_id").references(() => programs.id),
+  visaCategoryId: text("visa_category_id").references(() => visaCategories.id),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  currency: text("currency").notNull(),
+  installments: jsonb("installments").notNull(), // [{ label, percent, dueDays, stage? }]
+  active: boolean("active").notNull().default(true),
+  createdById: text("created_by_id").notNull().references(() => users.id),
+  createdAt: created(),
+  updatedAt: updated(),
+}, (t) => [index("fee_rules_service_idx").on(t.service, t.active)]);
+
+// Refunds work in two steps: the client asks, Finance/Admin approve the request, then the client fills in
+// the refund form (how to be paid) and Finance pays or declines it.
+export const refundStatus = pgEnum("refund_status", ["REQUESTED", "FORM_OPEN", "FORM_SUBMITTED", "PAID", "DECLINED"]);
+export const refundRequests = pgTable("refund_requests", {
+  id: id(),
+  reference: text("reference").notNull().unique(), // RF-2026-0001
+  applicationId: text("application_id").notNull().references(() => applications.id),
+  invoiceId: text("invoice_id").references(() => invoices.id),
+  clientId: text("client_id").notNull().references(() => users.id),
+  reason: text("reason").notNull(),
+  status: refundStatus("status").notNull().default("REQUESTED"),
+  decisionNote: text("decision_note"),
+  decidedById: text("decided_by_id").references(() => users.id),
+  // refund form (step 2)
+  amountRequested: numeric("amount_requested", { precision: 12, scale: 2 }),
+  currency: text("currency"),
+  payoutMethod: paymentMethod("payout_method"),
+  accountName: text("account_name"),
+  accountDetails: text("account_details"), // bank name and account, or mobile money number
+  formSubmittedAt: timestamp("form_submitted_at", { withTimezone: true }),
+  // payout
+  paidAmount: numeric("paid_amount", { precision: 12, scale: 2 }),
+  paidReference: text("paid_reference"),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
+  processedById: text("processed_by_id").references(() => users.id),
+  createdAt: created(),
+  updatedAt: updated(),
+}, (t) => [index("refunds_application_idx").on(t.applicationId), index("refunds_status_idx").on(t.status)]);
+
+// A client asks to change something about their application; the consultant or an admin decides.
+export const amendmentStatus = pgEnum("amendment_status", ["REQUESTED", "APPROVED", "DECLINED"]);
+export const amendmentRequests = pgTable("amendment_requests", {
+  id: id(),
+  applicationId: text("application_id").notNull().references(() => applications.id),
+  clientId: text("client_id").notNull().references(() => users.id),
+  kind: text("kind").notNull(), // CHANGE_LISTING | CHANGE_DETAILS | CHANGE_DATES | OTHER
+  details: text("details").notNull(),
+  status: amendmentStatus("status").notNull().default("REQUESTED"),
+  decisionNote: text("decision_note"),
+  decidedById: text("decided_by_id").references(() => users.id),
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
+  createdAt: created(),
+}, (t) => [index("amendments_application_idx").on(t.applicationId)]);
 
 // ---------- activity and notifications ----------
 export const activities = pgTable("activities", {
@@ -411,6 +476,8 @@ export const applicationsRelations = relations(applications, ({ one, many }) => 
   documents: many(documents),
   updates: many(applicationUpdates),
   invoices: many(invoices),
+  refunds: many(refundRequests),
+  amendments: many(amendmentRequests),
 }));
 export const checklistItemsRelations = relations(checklistItems, ({ one, many }) => ({
   application: one(applications, { fields: [checklistItems.applicationId], references: [applications.id] }),
@@ -427,6 +494,15 @@ export const applicationUpdatesRelations = relations(applicationUpdates, ({ one 
 export const invoicesRelations = relations(invoices, ({ one, many }) => ({
   application: one(applications, { fields: [invoices.applicationId], references: [applications.id] }),
   payments: many(payments),
+}));
+export const refundRequestsRelations = relations(refundRequests, ({ one }) => ({
+  application: one(applications, { fields: [refundRequests.applicationId], references: [applications.id] }),
+  invoice: one(invoices, { fields: [refundRequests.invoiceId], references: [invoices.id] }),
+  client: one(users, { fields: [refundRequests.clientId], references: [users.id] }),
+}));
+export const amendmentRequestsRelations = relations(amendmentRequests, ({ one }) => ({
+  application: one(applications, { fields: [amendmentRequests.applicationId], references: [applications.id] }),
+  client: one(users, { fields: [amendmentRequests.clientId], references: [users.id] }),
 }));
 export const paymentsRelations = relations(payments, ({ one }) => ({
   invoice: one(invoices, { fields: [payments.invoiceId], references: [invoices.id] }),

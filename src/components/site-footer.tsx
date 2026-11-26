@@ -19,6 +19,7 @@ export function SiteFooter() {
             <li><Link className="hover:underline" href="/work">Find jobs abroad</Link></li>
             <li><Link className="hover:underline" href="/study">Explore study programs</Link></li>
             <li><Link className="hover:underline" href="/visa">Check visa requirements</Link></li>
+            <li><Link className="hover:underline" href="/flights">Book a flight</Link></li>
           </ul>
         </div>
         <div>

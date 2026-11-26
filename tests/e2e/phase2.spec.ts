@@ -97,7 +97,7 @@ test.describe.serial("phase 2: staff workflows", () => {
     await f.page.getByLabel("What it is for").fill("Instalment 1 of 2: processing fee");
     await f.page.getByLabel("Amount", { exact: true }).fill("300");
     await f.page.getByLabel("Currency").selectOption("USD");
-    await f.page.getByRole("button", { name: "Issue invoice" }).click();
+    await f.page.getByRole("button", { name: "Issue invoice", exact: true }).click();
     await expect(f.page.getByRole("status").filter({ hasText: /Invoice INV-\d{4}-\d{4} issued/ })).toBeVisible();
     await f.page.reload();
 

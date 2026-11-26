@@ -5,6 +5,7 @@ import { canUploadToApplication, canViewApplication } from "@/lib/permissions";
 import { loadApplication } from "@/lib/applications";
 import { ApplicationView } from "@/components/application-view";
 import { InvoicesPanel } from "@/components/invoices-panel";
+import { RequestsPanel } from "@/components/requests-panel";
 
 export default async function ClientApplication({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ submitted?: string; existing?: string }> }) {
   const { id } = await params;
@@ -20,6 +21,7 @@ export default async function ClientApplication({ params, searchParams }: { para
       {sp.existing && <p role="status" className="mb-4 rounded-2xl bg-gold/15 p-4 font-medium">You already have an active application for this listing, so we opened it for you.</p>}
       <ApplicationView app={app} mode="client" canUpload={canUploadToApplication(user, app)}>
         <InvoicesPanel app={app} mode="client" />
+        <RequestsPanel app={app} mode="client" />
       </ApplicationView>
     </>
   );
