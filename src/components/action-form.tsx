@@ -1,5 +1,5 @@
 "use client";
-import { useActionState, useEffect, useRef } from "react";
+import { startTransition, useActionState, useEffect, useRef } from "react";
 
 type State = { ok?: string; error?: string } | undefined;
 
@@ -12,7 +12,12 @@ export function ActionForm({ action, children, className = "grid gap-3", submit,
   const ref = useRef<HTMLFormElement>(null);
   useEffect(() => { if (state?.ok && resetOnSuccess) ref.current?.reset(); }, [state, resetOnSuccess]);
   return (
-    <form ref={ref} action={run} className={className}>
+    <form ref={ref} className={className} onSubmit={(e) => {
+      // Submit without React's automatic form reset, so typed values survive a validation error.
+      e.preventDefault();
+      const fd = new FormData(e.currentTarget);
+      startTransition(() => run(fd));
+    }}>
       {children}
       <button className={buttonClass} disabled={pending}>{pending ? pendingLabel : submit}</button>
       {state?.error && <p role="alert" className="text-sm font-medium text-red-700">{state.error}</p>}

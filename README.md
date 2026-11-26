@@ -26,6 +26,15 @@ Website and connected portals for **FIRST FLIGHT BEST TRAVEL SOLUTION LTD**: Wor
 - **Everyone.** A change-password page; anyone with a temporary password must choose their own before using the system. Notifications link to the page they concern and can be marked as read.
 - **Email.** Key events (document requested or rejected, progress, updates, invoices, receipts, enquiry answers) are emailed through Resend once it is connected. Every attempt is recorded in `email_log`.
 
+## What's in Phase 3
+
+- **Content area** (`/staff/content`, Content Manager and Admin). Continents, countries, job categories, job offers, universities, programs, visa purposes, visa guidance, promotions, portfolio, testimonials and news.
+- **Publishing.** New items start as drafts. Drafts can be previewed on the real page (`?preview=1`, content staff only), published, unpublished or archived; only drafts that nothing uses can be deleted.
+- **Document checklists.** Jobs, programs and visa guidance each have an ordered checklist (required or optional, with notes). Jobs and programs can't be published without one. Submitted applications keep the checklist they were given.
+- **Visa guidance review queue.** Lists entries that are flagged or not checked for 180 days (and those due within 30). "Mark as checked today" requires confirming the official source was compared.
+- **Rules.** Testimonials need recorded consent before publishing; promotions need an end date after the start and a safe button link; salary ranges must make sense. Every change is in the activity history.
+- Field definitions live in `src/lib/content/entities.ts`: adding a field there adds it to the form, validation and save.
+
 The roadmap for later phases is in `docs/ROADMAP.md`.
 
 ## Run locally

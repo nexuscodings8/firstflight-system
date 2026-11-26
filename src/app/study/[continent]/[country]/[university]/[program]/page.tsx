@@ -1,22 +1,25 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getProgram } from "@/lib/queries";
+import { previewMode } from "@/lib/preview";
+import { PreviewBanner } from "@/components/preview-banner";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { AvailabilityBadge, canApply } from "@/components/badges";
 import { Checklist } from "@/components/checklist";
 import { Icon } from "@/components/icons";
 import { date, label, tuitionText } from "@/lib/format";
 
-type P = { params: Promise<{ continent: string; country: string; university: string; program: string }> };
+type P = { params: Promise<{ continent: string; country: string; university: string; program: string }>; searchParams: Promise<Record<string, string | undefined>> };
 
 export async function generateMetadata({ params }: P) {
   const p = await getProgram((await params).program);
   return { title: p ? `${p.name}, ${p.university.name}` : "Program" };
 }
 
-export default async function ProgramPage({ params }: P) {
+export default async function ProgramPage({ params, searchParams }: P) {
   const { continent, country, university, program } = await params;
-  const p = await getProgram(program);
+  const preview = await previewMode(await searchParams);
+  const p = await getProgram(program, preview);
   if (!p || p.university.slug !== university || p.university.country.slug !== country || p.university.country.continent?.slug !== continent) notFound();
   const facts: [string, string, string][] = [
     ["cap", "Study level", label(p.level)],
@@ -27,6 +30,8 @@ export default async function ProgramPage({ params }: P) {
     ["globe", "Language requirements", p.language],
   ];
   return (
+    <>
+    {preview && <PreviewBanner status={p.status} editHref={`/staff/content/programs/${p.id}`} />}
     <div className="wrap">
       <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/study", label: "Study Abroad" }, { href: `/study/${continent}`, label: p.university.country.continent!.name }, { href: `/study/${continent}/${country}`, label: p.university.country.name }, { href: `/study/${continent}/${country}/${university}`, label: p.university.name }, { label: p.name }]} />
       <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
@@ -49,5 +54,6 @@ export default async function ProgramPage({ params }: P) {
         </aside>
       </div>
     </div>
+    </>
   );
 }

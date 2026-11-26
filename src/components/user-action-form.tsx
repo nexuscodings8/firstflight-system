@@ -1,5 +1,5 @@
 "use client";
-import { useActionState, useEffect, useRef, useState } from "react";
+import { startTransition, useActionState, useEffect, useRef, useState } from "react";
 import type { UserState } from "@/app/staff/users/actions";
 
 /** Like ActionForm, but shows a one-time temporary password to hand to the person. */
@@ -11,7 +11,12 @@ export function UserActionForm({ action, children, submit, className = "grid gap
   const ref = useRef<HTMLFormElement>(null);
   useEffect(() => { if (state?.ok && resetOnSuccess) ref.current?.reset(); }, [state, resetOnSuccess]);
   return (
-    <form ref={ref} action={run} className={className}>
+    <form ref={ref} className={className} onSubmit={(e) => {
+      // Submit without React's automatic form reset, so typed values survive a validation error.
+      e.preventDefault();
+      const fd = new FormData(e.currentTarget);
+      startTransition(() => run(fd));
+    }}>
       {children}
       <button className={buttonClass} disabled={pending}>{pending ? "Working…" : submit}</button>
       {state?.error && <p role="alert" className="w-full text-sm font-medium text-red-700">{state.error}</p>}

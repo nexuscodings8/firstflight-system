@@ -35,12 +35,13 @@ export async function listJobs(f: JobFilter) {
     .orderBy(sql`case ${s.jobs.availability} when 'OPEN' then 0 when 'CLOSING_SOON' then 1 else 2 end`, asc(s.jobs.deadline));
 }
 
-export async function getJob(countrySlug: string, jobSlug: string) {
+// `preview` (content staff only, checked by the page) also returns drafts and archived records.
+export async function getJob(countrySlug: string, jobSlug: string, preview = false) {
   const row = await db.query.jobs.findFirst({
-    where: and(eq(s.jobs.slug, jobSlug), eq(s.jobs.status, PUB)),
+    where: and(eq(s.jobs.slug, jobSlug), preview ? undefined : eq(s.jobs.status, PUB)),
     with: { country: true, category: true, requirements: { orderBy: [asc(s.requirementItems.sortOrder)] } },
   });
-  if (!row || row.country.slug !== countrySlug || row.country.status !== PUB) return null;
+  if (!row || row.country.slug !== countrySlug || (!preview && row.country.status !== PUB)) return null;
   return row;
 }
 export const getCountryBySlug = (slug: string) =>
@@ -79,15 +80,15 @@ export async function universitiesIn(countryId: string) {
     .orderBy(asc(s.universities.name));
 }
 
-export const getUniversity = (slug: string) =>
+export const getUniversity = (slug: string, preview = false) =>
   db.query.universities.findFirst({
-    where: and(eq(s.universities.slug, slug), eq(s.universities.status, PUB)),
+    where: and(eq(s.universities.slug, slug), preview ? undefined : eq(s.universities.status, PUB)),
     with: { country: { with: { continent: true } }, programs: { where: eq(s.programs.status, PUB), orderBy: [asc(s.programs.name)] } },
   });
 
-export const getProgram = (slug: string) =>
+export const getProgram = (slug: string, preview = false) =>
   db.query.programs.findFirst({
-    where: and(eq(s.programs.slug, slug), eq(s.programs.status, PUB)),
+    where: and(eq(s.programs.slug, slug), preview ? undefined : eq(s.programs.status, PUB)),
     with: { university: { with: { country: { with: { continent: true } } } }, requirements: { orderBy: [asc(s.requirementItems.sortOrder)] } },
   });
 
@@ -151,4 +152,4 @@ export async function homeContent() {
 }
 
 export const listNews = () => db.select().from(s.newsPosts).where(eq(s.newsPosts.status, PUB)).orderBy(desc(s.newsPosts.publishedAt));
-export const getNews = (slug: string) => db.query.newsPosts.findFirst({ where: and(eq(s.newsPosts.slug, slug), eq(s.newsPosts.status, PUB)) });
+export const getNews = (slug: string, preview = false) => db.query.newsPosts.findFirst({ where: and(eq(s.newsPosts.slug, slug), preview ? undefined : eq(s.newsPosts.status, PUB)) });

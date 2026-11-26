@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { startTransition, useActionState, useState } from "react";
 import { changePassword } from "@/app/account/actions";
 
 export function PasswordForm({ required = false, home }: { required?: boolean; home: string }) {
@@ -14,7 +14,7 @@ export function PasswordForm({ required = false, home }: { required?: boolean; h
     </div>
   );
   return (
-    <form action={action} className="grid gap-4">
+    <form className="grid gap-4" onSubmit={(e) => { e.preventDefault(); const fd = new FormData(e.currentTarget); startTransition(() => action(fd)); }}>
       {state?.error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-medium text-red-700">{state.error}</p>}
       {state?.ok && <p role="status" className="rounded-xl bg-green-50 p-3 text-sm font-medium text-green-800">Password changed. Other devices have been signed out.</p>}
       <div><label className="label" htmlFor="current">{wasRequired ? "Temporary password" : "Current password"}</label><input className="input" id="current" name="current" type="password" autoComplete="current-password" required /></div>

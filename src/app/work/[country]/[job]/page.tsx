@@ -1,13 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getJob } from "@/lib/queries";
+import { previewMode } from "@/lib/preview";
+import { PreviewBanner } from "@/components/preview-banner";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { AvailabilityBadge, canApply } from "@/components/badges";
 import { Checklist } from "@/components/checklist";
 import { Icon } from "@/components/icons";
 import { date, label, salaryText } from "@/lib/format";
 
-type P = { params: Promise<{ country: string; job: string }> };
+type P = { params: Promise<{ country: string; job: string }>; searchParams: Promise<Record<string, string | undefined>> };
 
 export async function generateMetadata({ params }: P) {
   const { country, job } = await params;
@@ -15,9 +17,10 @@ export async function generateMetadata({ params }: P) {
   return { title: j ? `${j.title}, ${j.country.name}` : "Job" };
 }
 
-export default async function JobDetail({ params }: P) {
+export default async function JobDetail({ params, searchParams }: P) {
   const { country, job } = await params;
-  const j = await getJob(country, job);
+  const preview = await previewMode(await searchParams);
+  const j = await getJob(country, job, preview);
   if (!j) notFound();
   const open = canApply(j.availability);
   const facts: [string, string, string][] = [
@@ -27,6 +30,8 @@ export default async function JobDetail({ params }: P) {
     ["calendar", "Application deadline", date(j.deadline)],
   ];
   return (
+    <>
+    {preview && <PreviewBanner status={j.status} editHref={`/staff/content/jobs/${j.id}`} />}
     <div className="wrap">
       <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/work", label: "Work Abroad" }, { href: `/work/${j.country.slug}`, label: j.country.name }, { label: j.title }]} />
       <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
@@ -57,5 +62,6 @@ export default async function JobDetail({ params }: P) {
         </aside>
       </div>
     </div>
+    </>
   );
 }

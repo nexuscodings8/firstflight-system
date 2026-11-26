@@ -24,11 +24,11 @@
 - **Email:** notifications by email (Resend); switches on when `RESEND_API_KEY` and `EMAIL_FROM` are set.
 - **Accounts:** change password for everyone; temporary passwords must be replaced at first sign-in.
 
-## Phase 3: Content Manager
+## Phase 3: Content Manager (done)
 - **Catalogue:** countries and continents, job offers, universities and programs, with document checklists.
 - **Visa guidance:** guidance entries with source, last-checked date and review queue.
 - **Website content:** promotions (with expiry), portfolio, testimonials (consent required), news.
-- **Publishing:** draft → published → archived, with a preview.
+- **Publishing:** draft → published → archived, with a preview of draft pages for content staff; only unused drafts can be deleted.
 
 ## Phase 4: chatbot, WhatsApp and launch
 - **Chatbot:** answers from published FIRST FLIGHT content, with a hand-off to staff as an enquiry.
