@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
+import { HelpDock } from "@/components/help-dock";
+import { asc, eq } from "drizzle-orm";
+import { db, schema as s } from "@/db";
 
 // Every page reads live data (listings, the signed-in user), so render on each request.
 export const dynamic = "force-dynamic";
@@ -11,7 +14,9 @@ export const metadata: Metadata = {
   description: "FIRST FLIGHT BEST TRAVEL SOLUTION LTD helps you find jobs abroad, study programs and visa requirements, then apply and track every step.",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const contacts = await db.select({ id: s.whatsappContacts.id, name: s.whatsappContacts.name, department: s.whatsappContacts.department, number: s.whatsappContacts.number })
+    .from(s.whatsappContacts).where(eq(s.whatsappContacts.active, true)).orderBy(asc(s.whatsappContacts.sortOrder)).catch(() => []);
   return (
     <html lang="en">
       <head>
@@ -25,6 +30,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <SiteHeader />
         <main id="main" className="flex-1">{children}</main>
         <SiteFooter />
+        <HelpDock contacts={contacts} />
       </body>
     </html>
   );

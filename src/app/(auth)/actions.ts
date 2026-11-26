@@ -1,4 +1,5 @@
 "use server";
+import { blocked, clientIp, hit } from "@/lib/rate-limit";
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
@@ -34,10 +35,13 @@ export async function register(_: FormState, fd: FormData): Promise<FormState> {
 export async function login(_: FormState, fd: FormData): Promise<FormState> {
   const email = String(fd.get("email") ?? "").trim().toLowerCase();
   const password = String(fd.get("password") ?? "");
+  // Slow down password guessing: 8 wrong attempts per account and address, then a 15-minute pause.
+  const key = `login:${await clientIp()}:${email}`;
+  if (blocked(key, 8)) return { error: "Too many wrong attempts. Wait 15 minutes, or ask FIRST FLIGHT to reset your password.", fields: { email } };
   const u = email ? await db.query.users.findFirst({ where: eq(s.users.email, email) }) : undefined;
   // Same message whether the email or the password is wrong.
   const ok = u ? await bcrypt.compare(password, u.passwordHash) : await bcrypt.compare(password, "$2a$12$invalidinvalidinvalidinvalidinvalidinvalidinvalidinva");
-  if (!u || !ok) return { error: "Email or password is incorrect.", fields: { email } };
+  if (!u || !ok) { hit(key, 8, 15 * 60_000); return { error: "Email or password is incorrect.", fields: { email } }; }
   if (!u.active) return { error: "This account is deactivated. Contact FIRST FLIGHT.", fields: { email } };
   await createSession(u.id);
   if (u.mustChangePassword) redirect("/account/password?required=1");

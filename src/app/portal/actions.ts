@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { db, schema as s } from "@/db";
 import { requireUser } from "@/lib/auth";
 import { canUploadToApplication } from "@/lib/permissions";
-import { ALLOWED, MAX_BYTES, saveFile } from "@/lib/storage";
+import { ALLOWED, MAX_BYTES, looksLike, saveFile } from "@/lib/storage";
 import { logActivity, notify } from "@/lib/activity";
 
 export type UploadState = { ok?: string; error?: string } | undefined;
@@ -17,6 +17,7 @@ export async function uploadDocument(_: UploadState, fd: FormData): Promise<Uplo
   if (!(file instanceof File) || file.size === 0) return { error: "Choose a file to upload." };
   if (file.size > MAX_BYTES) return { error: "Files must be 10 MB or smaller." };
   if (!ALLOWED[file.type]) return { error: "Upload a PDF, JPG, PNG or Word document." };
+  if (!looksLike(file.type, new Uint8Array(await file.slice(0, 8).arrayBuffer()))) return { error: "This file doesn't look like a real PDF, JPG, PNG or Word document. Please export it again and retry." };
 
   const app = await db.query.applications.findFirst({ where: eq(s.applications.id, appId), columns: { id: true, reference: true, clientId: true, consultantId: true, status: true } });
   if (!app || !canUploadToApplication(user, app)) return { error: "You can't upload to this application." };

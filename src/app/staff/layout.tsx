@@ -12,6 +12,7 @@ const NAV: { href: string; text: string; roles: Role[] }[] = [
   { href: "/staff/content", text: "Content", roles: ["ADMIN", "CONTENT_MANAGER"] },
   { href: "/staff/users", text: "Users", roles: ["ADMIN"] },
   { href: "/staff/activity", text: "Activity", roles: ["ADMIN"] },
+  { href: "/staff/launch", text: "Launch checks", roles: ["ADMIN"] },
 ];
 
 export default async function StaffLayout({ children }: { children: React.ReactNode }) {

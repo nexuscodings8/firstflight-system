@@ -13,6 +13,8 @@ export const metadata = { title: "Enquiries" };
 function contextPairs(ctx: unknown): [string, string][] {
   if (!ctx || typeof ctx !== "object") return [];
   const c = ctx as Record<string, unknown>, out: [string, string][] = [];
+  if (c.source === "assistant") out.push(["Via", "Website assistant"]);
+  if (typeof c.page === "string" && c.page) out.push(["From page", c.page]);
   for (const [k, l] of [["program", "Program"], ["university", "University"], ["job", "Job"], ["country", "Country"]] as const) if (typeof c[k] === "string") out.push([l, c[k] as string]);
   if (c.visa && typeof c.visa === "object") for (const [k, v] of Object.entries(c.visa as Record<string, unknown>)) if (typeof v === "string" && v) out.push([label(k.replace(/([A-Z])/g, "_$1").toUpperCase()), v]);
   return out.slice(0, 10);
@@ -50,6 +52,9 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
             </div>
             <p className="mt-3 whitespace-pre-line">{e.message}</p>
             {ctx.length > 0 && <dl className="mt-3 flex flex-wrap gap-2 text-xs">{ctx.map(([k, v]) => <div key={k} className="rounded-lg bg-mist px-2.5 py-1"><dt className="inline muted">{k}: </dt><dd className="inline font-semibold">{v}</dd></div>)}</dl>}
+            {typeof (e.context as { transcript?: unknown } | null)?.transcript === "string" && (e.context as { transcript: string }).transcript && (
+              <details className="mt-3 text-sm"><summary className="cursor-pointer font-medium text-brand">Chat with the assistant before this</summary><pre className="mt-2 whitespace-pre-wrap rounded-xl bg-mist p-3 font-sans text-xs">{(e.context as { transcript: string }).transcript}</pre></details>
+            )}
             {e.resolution && <div className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm"><p className="font-semibold text-emerald-800">Answer given</p><p className="whitespace-pre-line">{e.resolution}</p></div>}
             <div className="mt-4 flex flex-wrap items-start gap-4">
               {e.status !== "CLOSED" && user.role === "CONSULTANT" && !e.assignedToId && (

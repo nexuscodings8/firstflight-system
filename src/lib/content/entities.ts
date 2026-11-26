@@ -5,7 +5,7 @@ import { opts, type Field } from "./fields";
 
 export type EntityKey =
   | "continents" | "countries" | "job-categories" | "jobs" | "universities" | "programs"
-  | "visa-categories" | "visa-guidance" | "promotions" | "portfolio" | "testimonials" | "news";
+  | "visa-categories" | "visa-guidance" | "promotions" | "portfolio" | "testimonials" | "news" | "whatsapp";
 
 export type Group = "Catalogue" | "Visa" | "Website";
 
@@ -168,6 +168,18 @@ export const ENTITIES: Record<EntityKey, Entity> = {
       { name: "body", label: "Article", type: "textarea", required: true, max: 20000, wide: true, help: "Leave an empty line between paragraphs." },
     ],
     listColumns: [{ label: "Published", field: "publishedAt" }], orderBy: "title",
+  },
+  whatsapp: {
+    key: "whatsapp", group: "Website", singular: "WhatsApp contact", plural: "WhatsApp contacts", table: s.whatsappContacts, titleField: "name", hasStatus: false,
+    help: "Visitors tap the WhatsApp button and choose who to message. Only contacts marked as shown appear.",
+    fields: [
+      { name: "name", label: "Name shown to visitors", type: "text", required: true, max: 60, help: "e.g. Study Abroad desk" },
+      { name: "department", label: "What they help with", type: "text", required: true, max: 80, help: "e.g. Universities, programs and student visas" },
+      { name: "number", label: "WhatsApp number", type: "phone", required: true, help: "With country code, e.g. +250 792 881 863" },
+      { name: "sortOrder", label: "Order in the list", type: "int" },
+      { name: "active", label: "Show on the website", type: "checkbox" },
+    ],
+    listColumns: [{ label: "Helps with", field: "department" }, { label: "Number", field: "number" }, { label: "Shown", field: "active" }], orderBy: "sortOrder",
   },
 };
 

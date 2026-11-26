@@ -35,7 +35,15 @@ Website and connected portals for **FIRST FLIGHT BEST TRAVEL SOLUTION LTD**: Wor
 - **Rules.** Testimonials need recorded consent before publishing; promotions need an end date after the start and a safe button link; salary ranges must make sense. Every change is in the activity history.
 - Field definitions live in `src/lib/content/entities.ts`: adding a field there adds it to the form, validation and save.
 
-The roadmap for later phases is in `docs/ROADMAP.md`.
+## What's in Phase 4
+
+- **Website assistant** ("Ask us", every public page). Understands questions about jobs, study, visas, fees, documents, applying, tracking and contact details, and answers only from published FIRST FLIGHT data and fixed explanations: it never invents visa rules or prices. "Talk to a consultant" turns the chat into an enquiry with the conversation attached. No AI service or API key is needed.
+- **WhatsApp picker.** Visitors choose the right desk; WhatsApp opens with a message naming the page they were on. Contacts are managed under Content → WhatsApp contacts.
+- **Permanent document storage.** Set `S3_BUCKET`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` (and `S3_REGION`, default `auto`) to keep uploads in Cloudflare R2 / AWS S3; otherwise they go to `UPLOAD_DIR` (use a Render disk at `/var/data`). Uploads are checked by their real content, not just their name.
+- **Hardening.** Wrong-password throttling (8 tries per account and address, then 15 minutes), enquiry and assistant limits, security headers, `robots.txt` and `sitemap.xml`.
+- **Launch checks** (`/staff/launch`, admin). Re-checks accounts, demo data, email, storage, the public address and content every time it is opened, with how to fix each item.
+
+The roadmap is in `docs/ROADMAP.md`.
 
 ## Run locally
 
@@ -83,6 +91,7 @@ Current setup (demo): a free web service, with FIRST FLIGHT's **own database** o
   - `NEXT_PUBLIC_SAMPLE_DATA=true`: shows the "sample data" notice
   - `UPLOAD_DIR=./storage/uploads`
   - `RESEND_API_KEY` and `EMAIL_FROM` (optional): switch on email. `EMAIL_FROM` must use a domain verified in Resend, e.g. `FIRST FLIGHT <notifications@yourdomain.com>`
+  - `S3_BUCKET`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` (optional): permanent document storage in Cloudflare R2 or S3
   - `APP_URL` (optional): the public address used in email links; Render's own address is used if it's not set
 
 **Before real clients use it:**

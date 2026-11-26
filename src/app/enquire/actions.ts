@@ -1,10 +1,9 @@
 "use server";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { db, schema as s } from "@/db";
 import { getCurrentUser } from "@/lib/auth";
-import { nextRef } from "@/lib/refs";
-import { logActivity, notify } from "@/lib/activity";
+import { createEnquiry } from "@/lib/enquiries";
+import { clientIp, hit } from "@/lib/rate-limit";
 
 export type EnqState = { error?: string } | undefined;
 const TYPES = ["PROGRAM_GUIDANCE", "VISA_CONSULTATION", "JOB_QUESTION", "GENERAL"] as const;
@@ -22,12 +21,8 @@ export async function submitEnquiry(_: EnqState, fd: FormData): Promise<EnqState
   let context: unknown = null;
   try { context = JSON.parse(String(fd.get("context") || "null")); } catch { context = null; }
   const user = await getCurrentUser();
-  const ref = await db.transaction(async (tx) => {
-    const reference = await nextRef(tx, "EQ");
-    const [e] = await tx.insert(s.enquiries).values({ reference, ...p.data, phone: p.data.phone ?? null, context, clientId: user?.role === "CLIENT" ? user.id : null }).returning();
-    await logActivity(tx, { actorId: user?.id, action: "enquiry.created", entityType: "enquiry", entityId: e.id, summary: `${p.data.name} sent ${reference} (${p.data.type.replace(/_/g, " ").toLowerCase()})` });
-    await notify(tx, { role: "CONSULTANT", title: "New enquiry", body: `${reference} from ${p.data.name}`, link: "/staff" });
-    return reference;
-  });
+  const ip = await clientIp();
+  if (!hit(`enquiry:${ip}`, 8, 3_600_000).ok) return { error: "You've sent several enquiries in the last hour. Please call or WhatsApp us instead." };
+  const ref = await createEnquiry({ ...p.data, phone: p.data.phone }, context, user);
   redirect(`/enquire/thanks?ref=${ref}`);
 }

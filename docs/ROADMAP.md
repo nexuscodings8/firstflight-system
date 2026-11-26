@@ -30,7 +30,7 @@
 - **Website content:** promotions (with expiry), portfolio, testimonials (consent required), news.
 - **Publishing:** draft → published → archived, with a preview of draft pages for content staff; only unused drafts can be deleted.
 
-## Phase 4: chatbot, WhatsApp and launch
+## Phase 4 (done): chatbot, WhatsApp and launch
 - **Chatbot:** answers from published FIRST FLIGHT content, with a hand-off to staff as an enquiry.
 - **WhatsApp:** a "Chat on WhatsApp" picker with admin-managed names, departments and numbers, and a prefilled message based on the page.
 - **Storage:** object storage for uploads.

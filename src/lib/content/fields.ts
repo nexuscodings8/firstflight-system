@@ -1,7 +1,7 @@
 // Field definitions and parsing for the Content Manager forms. Pure functions: no database, unit-tested.
 
 export type Option = { value: string; label: string };
-export type FieldType = "text" | "textarea" | "int" | "money" | "date" | "select" | "ref" | "country" | "checkbox" | "tags" | "url" | "link";
+export type FieldType = "text" | "textarea" | "int" | "money" | "date" | "select" | "ref" | "country" | "checkbox" | "tags" | "url" | "link" | "phone";
 
 export type Field = {
   name: string; // database property name (drizzle camelCase)
@@ -31,7 +31,8 @@ export function parseFields(fields: Field[], get: (name: string) => string | nul
     if (f.type === "checkbox") { values[f.name] = has(f.name); continue; }
     if (empty) {
       if (f.required) return { error: `${f.label} is required.` };
-      values[f.name] = f.type === "tags" ? [] : null;
+      // An empty "order" box means 0 (those columns can't be empty in the database).
+      values[f.name] = f.type === "tags" ? [] : f.name === "sortOrder" ? 0 : null;
       continue;
     }
     if (f.max && raw.length > f.max) return { error: `${f.label} must be ${f.max} characters or fewer.` };
@@ -73,6 +74,13 @@ export function parseFields(fields: Field[], get: (name: string) => string | nul
         // A page on this site ("/visa") or a full web address.
         if (!/^\/[^\s/][^\s]*$|^\/$/.test(raw) && !/^https?:\/\/[^\s]+\.[^\s]+$/i.test(raw)) return { error: `${f.label} must be a page on this site (like /study) or a full address starting with https://` };
         values[f.name] = raw;
+        break;
+      }
+      case "phone": {
+        // Stored as international digits only (what WhatsApp links need): "+250 792 881 863" → "250792881863".
+        const digits = raw.replace(/[\s()+.-]/g, "");
+        if (!/^[1-9]\d{7,14}$/.test(digits)) return { error: `${f.label} must be a full international number with country code, e.g. +250 792 881 863.` };
+        values[f.name] = digits;
         break;
       }
       case "tags": {

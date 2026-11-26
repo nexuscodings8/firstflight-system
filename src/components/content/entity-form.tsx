@@ -16,7 +16,7 @@ export function EntityForm({ entity, row, options }: { entity: Entity; row?: Rec
 
 function FieldInput({ f, value, options }: { f: Field; value: unknown; options: Option[] }) {
   const id = `f-${f.name}`;
-  const v = value === undefined ? "" : formValue(f, value);
+  const v = value === undefined ? "" : f.type === "phone" && value ? `+${String(value)}` : formValue(f, value);
   const help = f.help ? <p id={`${id}-h`} className="mt-1 text-xs muted">{f.help}</p> : null;
   const aria = f.help ? { "aria-describedby": `${id}-h` } : {};
   const wrap = f.wide || f.type === "textarea" ? "sm:col-span-2" : "";
@@ -37,6 +37,6 @@ function FieldInput({ f, value, options }: { f: Field; value: unknown; options: 
       </div>
     );
   }
-  const type = f.type === "date" ? "date" : f.type === "url" ? "url" : f.type === "int" ? "number" : "text";
+  const type = f.type === "date" ? "date" : f.type === "url" ? "url" : f.type === "int" ? "number" : f.type === "phone" ? "tel" : "text";
   return <div className={wrap}>{lbl}<input id={id} name={f.name} type={type} defaultValue={v} required={f.required} maxLength={f.max} inputMode={f.type === "money" ? "decimal" : undefined} step={f.type === "int" ? 1 : undefined} className="input" {...aria} />{help}</div>;
 }
