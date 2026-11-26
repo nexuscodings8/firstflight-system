@@ -40,6 +40,7 @@ export async function login(_: FormState, fd: FormData): Promise<FormState> {
   if (!u || !ok) return { error: "Email or password is incorrect.", fields: { email } };
   if (!u.active) return { error: "This account is deactivated. Contact FIRST FLIGHT.", fields: { email } };
   await createSession(u.id);
+  if (u.mustChangePassword) redirect("/account/password?required=1");
   redirect(safeNext(fd.get("next")) ?? homeFor(u.role));
 }
 

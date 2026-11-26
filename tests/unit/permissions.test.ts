@@ -38,3 +38,21 @@ describe("documents and internal data", () => {
     expect(homeFor("FINANCE")).toBe("/staff");
   });
 });
+
+describe("phase 2 rules", () => {
+  it("lets only the assigned consultant or an admin work on a case", async () => {
+    const { canWorkOnCase } = await import("@/lib/permissions");
+    expect(canWorkOnCase({ id: "k1", role: "CONSULTANT" }, app)).toBe(true);
+    expect(canWorkOnCase({ id: "k2", role: "CONSULTANT" }, app)).toBe(false);
+    expect(canWorkOnCase({ id: "a", role: "ADMIN" }, app)).toBe(true);
+    expect(canWorkOnCase({ id: "f", role: "FINANCE" }, app)).toBe(false);
+    expect(canWorkOnCase({ id: "c1", role: "CLIENT" }, app)).toBe(false);
+  });
+  it("shows invoices to the owning client, finance and admin only", async () => {
+    const { canViewInvoice } = await import("@/lib/permissions");
+    expect(canViewInvoice({ id: "c1", role: "CLIENT" }, app)).toBe(true);
+    expect(canViewInvoice({ id: "c2", role: "CLIENT" }, app)).toBe(false);
+    expect(canViewInvoice({ id: "f", role: "FINANCE" }, app)).toBe(true);
+    expect(canViewInvoice({ id: "k1", role: "CONSULTANT" }, app)).toBe(false);
+  });
+});

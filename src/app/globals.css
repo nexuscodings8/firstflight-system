@@ -35,3 +35,10 @@
 @utility badge { @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap; }
 @utility eyebrow { @apply text-sm font-semibold text-brand; }
 @utility muted { @apply text-muted; }
+
+/* Invoices, receipts and reports print without the site chrome. */
+@media print {
+  body > header, body > footer, .no-print { display: none !important; }
+  body { background: white; }
+  .card { box-shadow: none; }
+}

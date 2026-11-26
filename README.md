@@ -18,6 +18,14 @@ Website and connected portals for **FIRST FLIGHT BEST TRAVEL SOLUTION LTD**: Wor
 - **Staff dashboard.** Admin assigns and reassigns consultants. Consultants see their assigned files and open documents. Every action is logged in the activity history and notifies the next person.
 - **APIs.** `/api/locations/countries`, `/api/locations/cities?country=GB`, and `/api/documents/:id` (every download is permission-checked).
 
+## What's in Phase 2
+
+- **Consultants.** Verify or reject each uploaded document (a rejection tells the client why), request extra documents, move applications through stages or close them, post client updates and internal notes, and take and answer enquiries.
+- **Finance.** Issue invoices on an application (one per instalment), record payments with receipt numbers, block duplicate payment references and overpayment, void unpaid invoices, print invoices and receipts, and run a monthly payment report (print or CSV).
+- **Administrator.** Add staff with a temporary password, change roles, reset passwords, deactivate accounts, reassign work, and search all activity.
+- **Everyone.** A change-password page; anyone with a temporary password must choose their own before using the system. Notifications link to the page they concern and can be marked as read.
+- **Email.** Key events (document requested or rejected, progress, updates, invoices, receipts, enquiry answers) are emailed through Resend once it is connected. Every attempt is recorded in `email_log`.
+
 The roadmap for later phases is in `docs/ROADMAP.md`.
 
 ## Run locally
@@ -65,6 +73,8 @@ Current setup (demo): a free web service, with FIRST FLIGHT's **own database** o
   - `SEED_ON_EMPTY=true`: demo only; remove it for production
   - `NEXT_PUBLIC_SAMPLE_DATA=true`: shows the "sample data" notice
   - `UPLOAD_DIR=./storage/uploads`
+  - `RESEND_API_KEY` and `EMAIL_FROM` (optional): switch on email. `EMAIL_FROM` must use a domain verified in Resend, e.g. `FIRST FLIGHT <notifications@yourdomain.com>`
+  - `APP_URL` (optional): the public address used in email links; Render's own address is used if it's not set
 
 **Before real clients use it:**
 1. Move to a paid database and a paid web service with a **Disk** at `/var/data`.

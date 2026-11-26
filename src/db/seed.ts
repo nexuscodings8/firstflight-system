@@ -18,7 +18,7 @@ async function main() {
   await db.execute(sql`truncate table activities, notifications, payments, invoices, application_updates, documents,
     checklist_items, applications, enquiries, requirement_items, visa_guidance, visa_categories, programs, universities,
     jobs, job_categories, countries, continents, promotions, portfolio_entries, testimonials, news_posts, whatsapp_contacts,
-    counters, sessions, users restart identity cascade`);
+    counters, email_log, sessions, users restart identity cascade`);
 
   // ---------- people ----------
   const hash = await bcrypt.hash(pw, 12);

@@ -27,6 +27,19 @@ export function canUploadToApplication(a: Actor, app: AppAccess) {
   return canViewDocuments(a, app);
 }
 
+/** Day-to-day case work (documents, stages, client updates): the assigned consultant, or an administrator. */
+export function canWorkOnCase(a: Actor, app: AppAccess) {
+  return a.role === "ADMIN" || (a.role === "CONSULTANT" && app.consultantId === a.id);
+}
+
+/** Invoices and receipts: the client they belong to, Finance and administrators. */
+export function canViewInvoice(a: Actor, app: AppAccess) {
+  return a.role === "ADMIN" || a.role === "FINANCE" || (a.role === "CLIENT" && app.clientId === a.id);
+}
+
+/** Enquiries are answered by consultants and administrators. */
+export const canHandleEnquiries = (a: Actor) => a.role === "ADMIN" || a.role === "CONSULTANT";
+
 /** Internal notes never reach clients. */
 export const canSeeInternalNotes = (a: Actor) => isStaff(a.role) && a.role !== "CONTENT_MANAGER";
 export const canAssign = (a: Actor) => a.role === "ADMIN";

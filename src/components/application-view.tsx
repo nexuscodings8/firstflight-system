@@ -10,7 +10,11 @@ const STATE: Record<string, [string, string]> = {
 };
 
 /** Shared application view. `mode` decides what is visible: clients never see internal notes. */
-export function ApplicationView({ app, mode, canUpload }: { app: FullApplication; mode: "client" | "staff"; canUpload: boolean }) {
+export function ApplicationView({ app, mode, canUpload, itemTools, checklistFooter, updatesFooter, children }: {
+  app: FullApplication; mode: "client" | "staff"; canUpload: boolean;
+  itemTools?: (item: FullApplication["checklist"][number]) => React.ReactNode; // staff review controls per document
+  checklistFooter?: React.ReactNode; updatesFooter?: React.ReactNode; children?: React.ReactNode; // extra sections below
+}) {
   const sel = app.selection as { title: string; details: [string, string][] };
   const updates = app.updates.filter((u) => mode === "staff" || u.visibility === "CLIENT");
   const missing = app.checklist.filter((c) => c.mandatory && !["UPLOADED", "VERIFIED"].includes(c.state)).length;
@@ -41,11 +45,13 @@ export function ApplicationView({ app, mode, canUpload }: { app: FullApplication
                   {c.note && <p className="mt-1 rounded-lg bg-amber-50 p-2 text-sm text-amber-900">{c.note}</p>}
                   {c.documents.length > 0 && <ul className="mt-2 space-y-1 text-sm">{c.documents.map((d) => <li key={d.id}><a className="inline-flex items-center gap-1.5 text-brand underline" href={`/api/documents/${d.id}`}><Icon name="file" className="size-4" />{d.fileName}</a> <span className="muted">· {dateTime(d.createdAt)}</span></li>)}</ul>}
                   {canUpload && app.status === "ACTIVE" && c.state !== "VERIFIED" && <UploadForm applicationId={app.id} itemId={c.id} label={c.label} />}
+                  {itemTools?.(c)}
                 </li>
               );
             })}
           </ul>
           {!app.checklist.length && <p className="mt-3 text-sm muted">Your consultant will add the documents needed.</p>}
+          {checklistFooter}
         </section>
         <section className="card p-6">
           <h2 className="text-xl">Updates</h2>
@@ -53,10 +59,10 @@ export function ApplicationView({ app, mode, canUpload }: { app: FullApplication
             {updates.map((u) => <li key={u.id} className={`rounded-xl p-3 ${u.visibility === "INTERNAL" ? "border border-dashed border-amber-400 bg-amber-50" : "bg-mist"}`}>{u.visibility === "INTERNAL" && <p className="text-xs font-bold text-amber-800">Internal note</p>}<p>{u.body}</p><p className="mt-1 text-xs muted">{u.author.name} · {dateTime(u.createdAt)}</p></li>)}
           </ul>
           {!updates.length && <p className="mt-3 text-sm muted">No updates yet. Your consultant will post progress here.</p>}
-          <h2 className="mt-6 text-xl">Invoices and payments</h2>
-          {app.invoices.length ? <p className="mt-2 text-sm">{app.invoices.length} invoice(s)</p> : <p className="mt-2 text-sm muted">No invoices yet. Finance will issue them when your file moves to payment.</p>}
+          {updatesFooter}
         </section>
       </div>
+      {children}
     </div>
   );
 }

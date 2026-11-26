@@ -37,6 +37,7 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash").notNull(),
   role: role("role").notNull().default("CLIENT"),
   active: boolean("active").notNull().default(true),
+  mustChangePassword: boolean("must_change_password").notNull().default(false), // set for temporary passwords
   createdAt: created(),
   updatedAt: updated(),
 });
@@ -241,6 +242,7 @@ export const enquiries = pgTable("enquiries", {
   clientId: text("client_id").references(() => users.id),
   assignedToId: text("assigned_to_id").references(() => users.id),
   status: enquiryStatus("status").notNull().default("NEW"),
+  resolution: text("resolution"), // staff summary of the answer given
   createdAt: created(),
   updatedAt: updated(),
 }, (t) => [index("enquiries_status_idx").on(t.status)]);
@@ -267,6 +269,7 @@ export const payments = pgTable("payments", {
   reference: text("reference").notNull().unique(), // bank / mobile money reference: blocks duplicates
   receiptNumber: text("receipt_number").notNull().unique(),
   paidAt: timestamp("paid_at", { withTimezone: true }).notNull(),
+  note: text("note"),
   recordedById: text("recorded_by_id").notNull().references(() => users.id),
   createdAt: created(),
 }, (t) => [index("payments_invoice_idx").on(t.invoiceId)]);
@@ -294,6 +297,17 @@ export const notifications = pgTable("notifications", {
   readAt: timestamp("read_at", { withTimezone: true }),
   createdAt: created(),
 }, (t) => [index("notifications_user_idx").on(t.userId, t.readAt), index("notifications_role_idx").on(t.role, t.readAt)]);
+
+// Every email the system tries to send. SKIPPED means email is not connected yet (no RESEND_API_KEY).
+export const emailStatus = pgEnum("email_status", ["SENT", "FAILED", "SKIPPED"]);
+export const emailLog = pgTable("email_log", {
+  id: id(),
+  toEmail: text("to_email").notNull(),
+  subject: text("subject").notNull(),
+  status: emailStatus("status").notNull(),
+  error: text("error"),
+  createdAt: created(),
+}, (t) => [index("email_log_created_idx").on(t.createdAt)]);
 
 // ---------- website content ----------
 export const promotions = pgTable("promotions", {
@@ -416,4 +430,13 @@ export const invoicesRelations = relations(invoices, ({ one, many }) => ({
 }));
 export const paymentsRelations = relations(payments, ({ one }) => ({
   invoice: one(invoices, { fields: [payments.invoiceId], references: [invoices.id] }),
+  recordedBy: one(users, { fields: [payments.recordedById], references: [users.id] }),
+}));
+export const enquiriesRelations = relations(enquiries, ({ one }) => ({
+  assignedTo: one(users, { fields: [enquiries.assignedToId], references: [users.id] }),
+  client: one(users, { fields: [enquiries.clientId], references: [users.id] }),
+}));
+export const activitiesRelations = relations(activities, ({ one }) => ({
+  actor: one(users, { fields: [activities.actorId], references: [users.id] }),
+  application: one(applications, { fields: [activities.applicationId], references: [applications.id] }),
 }));

@@ -11,7 +11,7 @@ export const loadApplication = (id: string) =>
       consultant: { columns: { id: true, name: true, email: true } },
       checklist: { orderBy: [asc(s.checklistItems.sortOrder)], with: { documents: { orderBy: [desc(s.documents.createdAt)] } } },
       updates: { orderBy: [desc(s.applicationUpdates.createdAt)], with: { author: { columns: { name: true, role: true } } } },
-      invoices: { with: { payments: true } },
+      invoices: { orderBy: [asc(s.invoices.createdAt)], with: { payments: { orderBy: [asc(s.payments.paidAt)] } } },
     },
   });
 export type FullApplication = NonNullable<Awaited<ReturnType<typeof loadApplication>>>;

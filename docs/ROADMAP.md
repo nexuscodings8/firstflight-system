@@ -8,7 +8,7 @@
 - **Records:** activity log, notifications.
 - **Tests:** unit and end-to-end.
 
-## Phase 2: staff workflows
+## Phase 2: staff workflows (done)
 - **Consultant:**
   - verify or reject documents
   - request missing documents, which updates the client's checklist and notifies them
@@ -21,7 +21,8 @@
   - issue receipts
   - update balances, which shows in the client portal
 - **Admin:** user and role management, reassignment, a cross-department activity view.
-- **Email:** notifications by email (Resend).
+- **Email:** notifications by email (Resend); switches on when `RESEND_API_KEY` and `EMAIL_FROM` are set.
+- **Accounts:** change password for everyone; temporary passwords must be replaced at first sign-in.
 
 ## Phase 3: Content Manager
 - **Catalogue:** countries and continents, job offers, universities and programs, with document checklists.

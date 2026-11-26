@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/auth";
 import { STAGE_LABEL, SERVICE_LABEL, date, dateTime, label } from "@/lib/format";
 import { Empty } from "@/components/cards";
 import { StageTracker } from "@/components/stage-tracker";
+import { markNotificationsRead } from "@/app/staff/actions";
 
 export const metadata = { title: "My applications" };
 
@@ -36,8 +37,8 @@ export default async function Portal() {
         </div>
       </div>
       <aside className="card h-fit p-5">
-        <h2 className="text-lg">Latest notifications</h2>
-        <ul className="mt-3 space-y-3">{notes.map((n) => <li key={n.id} className="rounded-xl bg-mist p-3"><p className="font-semibold">{n.title}</p><p className="text-sm">{n.body}</p><p className="mt-1 text-xs muted">{dateTime(n.createdAt)}</p></li>)}</ul>
+        <div className="flex items-center justify-between gap-2"><h2 className="text-lg">Latest notifications</h2>{notes.length > 0 && <form action={markNotificationsRead}><button className="text-sm font-medium text-brand hover:underline">Mark as read</button></form>}</div>
+        <ul className="mt-3 space-y-3">{notes.map((n) => <li key={n.id} className="rounded-xl bg-mist p-3"><p className="font-semibold">{n.link ? <Link className="text-brand underline" href={n.link}>{n.title}</Link> : n.title}</p><p className="text-sm">{n.body}</p><p className="mt-1 text-xs muted">{dateTime(n.createdAt)}</p></li>)}</ul>
         {!notes.length && <p className="mt-3 text-sm muted">You&apos;re all caught up.</p>}
       </aside>
     </div>
