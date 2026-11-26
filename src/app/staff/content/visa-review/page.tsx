@@ -21,7 +21,7 @@ export default async function VisaReview() {
   });
   return (
     <div className="grid gap-4">
-      <div><h1 className="text-3xl">Visa guidance review</h1><p className="mt-1 max-w-2xl text-sm muted">Entries flagged for review, or not checked against their official source for {STALE_AFTER_DAYS} days, are hidden from the visa checker and visitors are offered a consultation instead. Entries due within 30 days are listed too.</p></div>
+      <div><h1 className="text-[clamp(26px,3vw,36px)]">Visa guidance review</h1><p className="mt-1 max-w-2xl text-sm muted">Entries flagged for review, or not checked against their official source for {STALE_AFTER_DAYS} days, are hidden from the visa checker and visitors are offered a consultation instead. Entries due within 30 days are listed too.</p></div>
       {rows.map((g) => {
         const overdue = g.reviewState === "NEEDS_REVIEW" || +g.lastCheckedAt < +stale;
         return (

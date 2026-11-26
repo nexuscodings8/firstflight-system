@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic"; // built per request from the live database
+
 import type { MetadataRoute } from "next";
 import { listJobs, listNews, searchPrograms } from "@/lib/queries";
 import { siteUrl } from "@/lib/email";

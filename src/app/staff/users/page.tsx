@@ -18,7 +18,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
     .from(s.users).where(role ? eq(s.users.role, role) : undefined).orderBy(desc(s.users.active), sql`${s.users.role} = 'CLIENT'`, asc(s.users.role), asc(s.users.name)).limit(500);
   return (
     <div className="grid gap-6">
-      <h1 className="text-3xl">Users</h1>
+      <h1 className="text-[clamp(26px,3vw,36px)]">Users</h1>
       <section className="card p-5">
         <h2 className="text-xl">Add a staff member</h2>
         <p className="mt-1 text-sm muted">They get a temporary password and must choose their own at first sign-in. Clients create their own accounts on the website.</p>

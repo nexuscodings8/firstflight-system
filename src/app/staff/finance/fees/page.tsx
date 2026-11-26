@@ -26,7 +26,7 @@ export default async function FeesPage() {
   return (
     <div className="grid gap-6">
       <Link href="/staff/finance" className="text-sm font-semibold text-brand">← Finance</Link>
-      <div><h1 className="text-3xl">Service fees</h1><p className="mt-1 max-w-2xl muted">Fees are private: visitors never see them. Clients see only the fee plan applied to their own application. Changing a fee here never changes a plan already applied, and every change is recorded in the activity history.</p></div>
+      <div><h1 className="text-[clamp(26px,3vw,36px)]">Service fees</h1><p className="mt-1 max-w-2xl muted">Fees are private: visitors never see them. Clients see only the fee plan applied to their own application. Changing a fee here never changes a plan already applied, and every change is recorded in the activity history.</p></div>
       <section className="card p-5"><h2 className="mb-3 text-xl">New fee</h2><FeeRuleForm options={options} /></section>
       <section className="grid gap-3">
         <h2 className="text-xl">Fees</h2>

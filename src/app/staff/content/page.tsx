@@ -21,7 +21,7 @@ export default async function ContentHome() {
   ]);
   return (
     <div className="grid gap-6">
-      <div><h1 className="text-3xl">Website content</h1><p className="mt-1 muted">New items start as drafts. Visitors only see what is published; preview a draft before publishing it.</p></div>
+      <div><h1 className="text-[clamp(26px,3vw,36px)]">Website content</h1><p className="mt-1 muted">New items start as drafts. Visitors only see what is published; preview a draft before publishing it.</p></div>
       {(review.length > 0 || ending.length > 0) && (
         <div className="grid gap-3 sm:grid-cols-2">
           {review.length > 0 && <Link href="/staff/content/visa-review" className="card-link border-amber-300 bg-amber-50 p-5"><p className="font-semibold text-amber-900">{review.length} visa guidance entr{review.length === 1 ? "y needs" : "ies need"} checking</p><p className="text-sm text-amber-900">Visitors are offered a consultation instead of these checklists until they are checked.</p></Link>}

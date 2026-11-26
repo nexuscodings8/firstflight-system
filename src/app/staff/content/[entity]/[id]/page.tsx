@@ -62,7 +62,7 @@ export default async function EditEntity({ params, searchParams }: { params: Pro
       <Link href={`/staff/content/${e.key}`} className="text-sm font-semibold text-brand">← {e.plural}</Link>
       {sp.created && <p role="status" className="rounded-xl bg-emerald-50 p-3 text-sm font-medium text-emerald-800">Created as a draft. {e.requirements ? "Add its document checklist, then " : ""}{url ? "preview and " : ""}publish it when it&apos;s ready.</p>}
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div><p className="eyebrow capitalize">{e.singular}</p><h1 className="text-3xl">{title}</h1>{"slug" in row && <p className="text-xs muted">Web address name: {String(row.slug)}</p>}</div>
+        <div><p className="eyebrow capitalize">{e.singular}</p><h1 className="text-[clamp(26px,3vw,36px)]">{title}</h1>{"slug" in row && <p className="text-xs muted">Web address name: {String(row.slug)}</p>}</div>
         {e.hasStatus && <StatusBadge status={status} />}
       </div>
 

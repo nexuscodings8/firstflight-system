@@ -27,6 +27,7 @@ test.describe.serial("phase 2: staff workflows", () => {
 
   test("client uploads; consultant rejects with a reason, then verifies the new copy", async ({ browser }) => {
     const k = await as(browser, "consultant@firstflight.test");
+    await k.page.goto("/staff/applications");
     await k.page.getByRole("link", { name: REF }).click();
     await k.page.waitForURL(/\/staff\/applications\//);
     staffUrl = k.page.url();
@@ -87,7 +88,7 @@ test.describe.serial("phase 2: staff workflows", () => {
     await expect(item(c.page, "Police clearance certificate").getByText("Requested by consultant")).toBeVisible();
     await expect(c.page.getByText("Your file looks good so far.")).toBeVisible();
     await expect(c.page.getByText(`greenhouse experience ${stamp}`)).toHaveCount(0);
-    await expect(c.page.getByText("Current step").first()).toBeVisible();
+    await expect(c.page.getByText("In progress").first()).toBeVisible();
     await k.close(); await c.close();
   });
 

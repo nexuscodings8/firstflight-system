@@ -17,7 +17,9 @@ async function as(browser: Browser, email: string) {
 }
 const ok = (p: Page, t: string | RegExp) => expect(p.getByRole("status").filter({ hasText: t }).first()).toBeVisible();
 async function openDemo(p: Page) {
-  await p.getByRole("link", { name: REF }).first().click();
+  // Clients find it under My applications, staff under Applications.
+  await p.goto(new URL(p.url()).pathname.startsWith("/portal") ? "/portal/applications" : "/staff/applications");
+  await p.getByRole("link", { name: new RegExp(REF) }).first().click();
   await p.waitForURL(/\/applications\//);
 }
 

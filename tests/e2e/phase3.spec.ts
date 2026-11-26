@@ -19,7 +19,7 @@ const err = (p: Page, t: string | RegExp) => expect(p.getByRole("alert").filter(
 test.describe.serial("phase 3: content management", () => {
   test("a job goes from draft to published, with a checklist and a preview", async ({ page, browser }) => {
     await signIn(page, "admin@firstflight.test");
-    await page.getByRole("link", { name: "Content", exact: true }).click();
+    await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Website content" }).click();
     await page.getByRole("link", { name: "Job offers" }).first().click();
     await page.getByRole("link", { name: "New job offer" }).click();
     const title = `Test warehouse operative ${stamp}`;

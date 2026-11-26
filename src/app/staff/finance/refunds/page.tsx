@@ -23,7 +23,7 @@ export default async function RefundsPage({ searchParams }: { searchParams: Prom
     <div className="grid gap-5">
       <Link href="/staff/finance" className="text-sm font-semibold text-brand">← Finance</Link>
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div><h1 className="text-3xl">Refunds</h1><p className="mt-1 max-w-2xl text-sm muted">1. The client asks. 2. You approve (the refund form opens for them) or decline. 3. The client fills in the form. 4. You pay and record the transfer reference.</p></div>
+        <div><h1 className="text-[clamp(26px,3vw,36px)]">Refunds</h1><p className="mt-1 max-w-2xl text-sm muted">1. The client asks. 2. You approve (the refund form opens for them) or decline. 3. The client fills in the form. 4. You pay and record the transfer reference.</p></div>
         <nav aria-label="Filter refunds" className="flex gap-1 text-sm">{(["open", "done"] as const).map((k) => <Link key={k} href={`/staff/finance/refunds?show=${k}`} aria-current={show === k ? "page" : undefined} className={`rounded-lg px-3 py-1.5 font-medium ${show === k ? "bg-brand text-white" : "bg-white hover:bg-mist"}`}>{k === "open" ? "Open" : "Paid or declined"}</Link>)}</nav>
       </div>
       {rows.map((r) => (

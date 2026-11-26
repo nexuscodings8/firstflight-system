@@ -23,7 +23,7 @@ export async function assignConsultant(fd: FormData) {
     await notify(tx, { userId: consultant.id, title: "Application assigned to you", body: `${app.reference}`, link: `/staff/applications/${app.id}` });
     await notify(tx, { userId: app.clientId, title: "Your consultant is assigned", body: `${consultant.name} is now handling ${app.reference}.`, link: `/portal/applications/${app.id}` });
   });
-  revalidatePath("/staff");
+  revalidatePath("/staff"); revalidatePath("/staff/applications");
   revalidatePath(`/staff/applications/${app.id}`);
 }
 

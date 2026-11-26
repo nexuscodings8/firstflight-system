@@ -55,6 +55,7 @@ test("client portal and staff dashboard fit the screen", async ({ page }) => {
     await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page).toHaveURL(home);
     expect(await overflow(page)).toBeLessThanOrEqual(1);
+    await page.goto(home.source.includes("portal") ? "/portal/applications" : "/staff/applications");
     await page.getByRole("link", { name: /FF-WA-\d{4}-0001/ }).first().click();
     await expect(page.locator("h1").first()).toBeVisible();
     expect(await overflow(page)).toBeLessThanOrEqual(1);

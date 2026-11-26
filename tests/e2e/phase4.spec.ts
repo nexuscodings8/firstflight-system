@@ -72,6 +72,7 @@ test.describe.serial("phase 4: help, storage and launch", () => {
 
   test("a file pretending to be a PDF is refused", async ({ page }) => {
     await signIn(page, "client@firstflight.test");
+    await page.goto("/portal/applications");
     await page.getByRole("link", { name: /FF-WA-\d{4}-0001/ }).first().click();
     const row = page.locator("li", { has: page.getByText("CV", { exact: true }) }).first();
     await row.getByLabel("Choose a file for CV").setInputFiles({ name: "cv.pdf", mimeType: "application/pdf", buffer: Buffer.from("MZ this is not a pdf") });
@@ -95,7 +96,7 @@ test.describe.serial("phase 4: help, storage and launch", () => {
 
   test("launch checks, security headers and robots.txt", async ({ page, request }) => {
     await signIn(page, "admin@firstflight.test");
-    await page.getByRole("link", { name: "Launch checks" }).click();
+    await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Launch checks" }).click();
     await expect(page.getByRole("status").filter({ hasText: /must be fixed before launch/ })).toBeVisible();
     await expect(page.locator("li", { hasText: "Demo accounts switched off" }).getByText("Not ready")).toBeVisible();
     const res = await request.get("/");

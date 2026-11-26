@@ -56,7 +56,7 @@ export default async function LaunchChecks() {
   const STYLE = { pass: ["Ready", "bg-emerald-50 text-emerald-700"], warn: ["Check", "bg-amber-50 text-amber-800"], fail: ["Not ready", "bg-red-50 text-red-700"] } as const;
   return (
     <div className="grid gap-5">
-      <div><h1 className="text-3xl">Launch checks</h1><p className="mt-1 max-w-2xl muted">Work through this list before giving the site to real clients. It re-checks every time you open it.</p></div>
+      <div><h1 className="text-[clamp(26px,3vw,36px)]">Launch checks</h1><p className="mt-1 max-w-2xl muted">Work through this list before giving the site to real clients. It re-checks every time you open it.</p></div>
       <p role="status" className={`rounded-2xl p-4 font-semibold ${fails ? "bg-red-50 text-red-800" : warns ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-800"}`}>
         {fails ? `${fails} item${fails === 1 ? "" : "s"} must be fixed before launch${warns ? `, and ${warns} to review` : ""}.` : warns ? `Nothing blocking. ${warns} item${warns === 1 ? "" : "s"} to review.` : "Everything is ready for launch."}
       </p>

@@ -5,6 +5,8 @@ import { canUploadToApplication, canViewApplication } from "@/lib/permissions";
 import { loadApplication } from "@/lib/applications";
 import { ApplicationView } from "@/components/application-view";
 import { InvoicesPanel } from "@/components/invoices-panel";
+import { paidStub } from "@/components/paid-stub";
+import { nextStep } from "@/lib/next-step";
 import { RequestsPanel } from "@/components/requests-panel";
 
 export default async function ClientApplication({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ submitted?: string; existing?: string }> }) {
@@ -16,10 +18,10 @@ export default async function ClientApplication({ params, searchParams }: { para
   if (!app || !canViewApplication(user, app)) notFound();
   return (
     <>
-      <Link href="/portal" className="mb-4 inline-flex text-sm font-semibold text-brand">← Back to my applications</Link>
+      <Link href="/portal/applications" className="mb-4 inline-flex text-sm font-semibold text-brand underline">← My applications</Link>
       {sp.submitted && <p role="status" className="mb-4 rounded-2xl bg-emerald-50 p-4 font-medium text-emerald-800">Application {app.reference} submitted. Upload your documents below; a consultant will be assigned shortly.</p>}
       {sp.existing && <p role="status" className="mb-4 rounded-2xl bg-gold/15 p-4 font-medium">You already have an active application for this listing, so we opened it for you.</p>}
-      <ApplicationView app={app} mode="client" canUpload={canUploadToApplication(user, app)}>
+      <ApplicationView app={app} mode="client" canUpload={canUploadToApplication(user, app)} stub={paidStub(app)} nextStep={nextStep(app, "client")}>
         <InvoicesPanel app={app} mode="client" />
         <RequestsPanel app={app} mode="client" />
       </ApplicationView>

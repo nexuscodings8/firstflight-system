@@ -1,6 +1,7 @@
-import { STAGE_LABEL, SERVICE_LABEL, dateTime, date, label } from "@/lib/format";
+import { dateTime } from "@/lib/format";
 import type { FullApplication } from "@/lib/applications";
 import { StageTracker } from "./stage-tracker";
+import { BoardingPass } from "./boarding-pass";
 import { UploadForm } from "./upload-form";
 import { Icon } from "./icons";
 
@@ -10,8 +11,9 @@ const STATE: Record<string, [string, string]> = {
 };
 
 /** Shared application view. `mode` decides what is visible: clients never see internal notes. */
-export function ApplicationView({ app, mode, canUpload, itemTools, checklistFooter, updatesFooter, children }: {
+export function ApplicationView({ app, mode, canUpload, itemTools, checklistFooter, updatesFooter, children, stub, nextStep }: {
   app: FullApplication; mode: "client" | "staff"; canUpload: boolean;
+  stub?: React.ReactNode; nextStep?: string; // boarding-pass stub content and the "Next step" callout
   itemTools?: (item: FullApplication["checklist"][number]) => React.ReactNode; // staff review controls per document
   checklistFooter?: React.ReactNode; updatesFooter?: React.ReactNode; children?: React.ReactNode; // extra sections below
 }) {
@@ -20,18 +22,10 @@ export function ApplicationView({ app, mode, canUpload, itemTools, checklistFoot
   const missing = app.checklist.filter((c) => c.mandatory && !["UPLOADED", "VERIFIED"].includes(c.state)).length;
   return (
     <div className="grid gap-6">
-      <section className="card p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="eyebrow">{SERVICE_LABEL[app.service]} · {app.reference}</p>
-            <h1 className="mt-1 text-2xl sm:text-3xl">{sel.title}</h1>
-            <p className="mt-1 text-sm muted">Submitted {date(app.createdAt)} · Consultant: <strong className="text-ink">{app.consultant?.name ?? "Being assigned"}</strong></p>
-          </div>
-          <span className="badge bg-gold/25 text-ink">{app.status === "ACTIVE" ? STAGE_LABEL[app.stage] : label(app.status)}</span>
-        </div>
-        <dl className="mt-4 grid gap-3 sm:grid-cols-3">{sel.details.map(([k, v]) => <div key={k} className="rounded-xl bg-mist p-3"><dt className="text-xs muted">{k}</dt><dd className="font-semibold">{v}</dd></div>)}</dl>
-        <div className="mt-6"><StageTracker stage={app.stage} status={app.status} /></div>
-      </section>
+      <BoardingPass app={app} stub={stub} headingLevel="h1" />
+      {sel.details.length > 0 && <dl className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]">{sel.details.map(([k, v]) => <div key={k} className="rounded-xl border border-line bg-white p-3"><dt className="text-xs muted">{k}</dt><dd className="font-semibold">{v}</dd></div>)}</dl>}
+      <section className="card p-6" aria-label="Application progress"><StageTracker stage={app.stage} status={app.status} /></section>
+      {nextStep && <section className="rounded-2xl border border-line border-l-4 border-l-gold bg-white p-5 shadow-sm"><h2 className="text-lg">Next step</h2><p className="mt-1">{nextStep}</p></section>}
 
       <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
         <section className="card p-6">

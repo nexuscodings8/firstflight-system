@@ -3,6 +3,7 @@ import "./globals.css";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { HelpDock } from "@/components/help-dock";
+import { ChromeGate } from "@/components/shell/chrome-gate";
 import { asc, eq } from "drizzle-orm";
 import { db, schema as s } from "@/db";
 
@@ -27,9 +28,9 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       </head>
       <body className="flex min-h-screen flex-col">
         <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-2">Skip to content</a>
-        <SiteHeader />
+        <ChromeGate><SiteHeader /></ChromeGate>
         <main id="main" className="flex-1">{children}</main>
-        <SiteFooter />
+        <ChromeGate><SiteFooter /></ChromeGate>
         <HelpDock contacts={contacts} />
       </body>
     </html>

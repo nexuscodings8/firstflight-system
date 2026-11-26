@@ -28,7 +28,7 @@ export default async function EntityList({ params, searchParams }: { params: Pro
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div><h1 className="text-3xl">{e.plural}</h1>{e.help && <p className="mt-1 max-w-2xl text-sm muted">{e.help}</p>}</div>
+        <div><h1 className="text-[clamp(26px,3vw,36px)]">{e.plural}</h1>{e.help && <p className="mt-1 max-w-2xl text-sm muted">{e.help}</p>}</div>
         <Link href={`/staff/content/${e.key}/new`} className="btn-primary btn-sm">New {e.singular}</Link>
       </div>
       {sp.deleted && <p role="status" className="rounded-xl bg-emerald-50 p-3 text-sm font-medium text-emerald-800">Deleted &ldquo;{sp.deleted}&rdquo;.</p>}

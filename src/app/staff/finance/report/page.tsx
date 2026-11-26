@@ -39,7 +39,7 @@ export default async function ReportPage({ searchParams }: { searchParams: Promi
       </div>
       <section className="card p-6 print:border-0 print:p-0">
         <p className="eyebrow">FIRST FLIGHT BEST TRAVEL SOLUTION LTD</p>
-        <h1 className="text-3xl">Payments received: {monthName(ym)}</h1>
+        <h1 className="text-[clamp(26px,3vw,36px)]">Payments received: {monthName(ym)}</h1>
         <p className="text-sm muted">Prepared by {user.name} on {date(new Date())} · {rows.length} payment{rows.length === 1 ? "" : "s"}</p>
         <div className="mt-5 grid gap-4 sm:grid-cols-3">
           {[...totals].map(([cur, c]) => <div key={cur} className="rounded-xl bg-mist p-4"><p className="text-sm muted">Total received ({cur})</p><p className="font-display text-2xl font-extrabold">{money(fromCents(c), cur)}</p>{refundTotals.get(cur) ? <p className="mt-1 text-sm">Refunded {money(fromCents(refundTotals.get(cur)!), cur)} · net {money(fromCents(c - refundTotals.get(cur)!), cur)}</p> : null}</div>)}

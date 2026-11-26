@@ -38,7 +38,7 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
   return (
     <div className="grid gap-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h1 className="text-3xl">Enquiries</h1>
+        <h1 className="text-[clamp(26px,3vw,36px)]">Enquiries</h1>
         <nav aria-label="Filter enquiries" className="flex flex-wrap gap-1 text-sm">{(Object.keys(TABS) as (keyof typeof TABS)[]).map((k) => <Link key={k} href={`/staff/enquiries?show=${k}`} aria-current={show === k ? "page" : undefined} className={`rounded-lg px-3 py-1.5 font-medium ${show === k ? "bg-brand text-white" : "bg-white hover:bg-mist"}`}>{TABS[k]}</Link>)}</nav>
       </div>
       {rows.map((e) => {

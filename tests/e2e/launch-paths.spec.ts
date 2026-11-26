@@ -63,6 +63,7 @@ test.describe.serial("launch paths", () => {
   test("admin assigns the application; consultant sees it and can open the document", async ({ page, browser }) => {
     await signIn(page, "admin@firstflight.test");
     await expect(page).toHaveURL(/\/staff/);
+    await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: /^Applications/ }).click();
     const row = page.locator("tr", { hasText: client.name });
     await row.getByRole("combobox").selectOption({ label: "Sandrine Umutoni" });
     await row.getByRole("button", { name: "Assign" }).click();
@@ -71,7 +72,8 @@ test.describe.serial("launch paths", () => {
     const ctx = await browser.newContext();
     const c = await ctx.newPage();
     await signIn(c, "consultant@firstflight.test");
-    await c.locator("tr", { hasText: client.name }).getByRole("link").click();
+    await c.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: /^My applications/ }).click();
+    await c.locator("tr", { hasText: client.name }).getByRole("link").first().click();
     await expect(c).toHaveURL(/\/staff\/applications\//);
     await expect(c.locator("main").getByText(/Consultant:\s*Sandrine Umutoni/)).toBeVisible();
     const dl = c.waitForEvent("download");

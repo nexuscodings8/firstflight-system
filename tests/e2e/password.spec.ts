@@ -8,7 +8,7 @@ test("a user can change their password and sign in with the new one", async ({ p
   await page.getByLabel("Password").fill(PW);
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL(/\/staff/);
-  await page.getByRole("link", { name: "Change password" }).click();
+  await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Profile and password" }).click();
   await page.getByLabel("Current password").fill("wrong-password");
   await page.getByLabel("New password", { exact: true }).fill("NewPass-2026-ok");
   await page.getByLabel("Repeat new password").fill("NewPass-2026-ok");

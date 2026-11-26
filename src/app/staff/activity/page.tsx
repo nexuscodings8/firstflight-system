@@ -28,7 +28,7 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
   const rows = await db.query.activities.findMany({ where: and(...conds), orderBy: [desc(s.activities.createdAt)], limit: 300, with: { actor: { columns: { name: true, role: true } } } });
   return (
     <div className="grid gap-5">
-      <h1 className="text-3xl">Activity</h1>
+      <h1 className="text-[clamp(26px,3vw,36px)]">Activity</h1>
       <form className="card flex flex-wrap items-end gap-3 p-4" action="/staff/activity">
         <div><label className="label" htmlFor="ar">Area</label><select id="ar" name="area" defaultValue={area} className="input min-h-9 py-1"><option value="">Everything</option>{Object.entries(AREAS).map(([k, v]) => <option key={k} value={k}>{v.text}</option>)}</select></div>
         <div><label className="label" htmlFor="dy">Period</label><select id="dy" name="days" defaultValue={String(days)} className="input min-h-9 py-1"><option value="1">Last 24 hours</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="365">Last year</option></select></div>
