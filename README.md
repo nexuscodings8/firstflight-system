@@ -54,20 +54,28 @@ CHROME_PATH=/usr/bin/google-chrome npm run test:e2e   # in another: launch paths
 
 ## Deploy on Render
 
-1. **Database.** Create a Render **PostgreSQL** database and copy its *Internal Database URL*.
-2. **Web service.** Create a Render **Web Service** from this GitHub repository:
-   - **Build command:** `npm ci --include=dev && npm run db:migrate && npm run build`
-   - **Start command:** `npm run start`
-   - **Environment variables:**
-     - `DATABASE_URL`: the database URL
-     - `UPLOAD_DIR`: `/var/data/uploads`
-     - `NODE_ENV`: `production`
-3. **Disk.** Add a **Disk** mounted at `/var/data`. Client documents are stored there and survive deploys. (Render disks need a paid instance. Phase 4 can move uploads to object storage instead.)
-4. **First admin.** Create the first real administrator once from the Render **Shell**:
+Current setup (demo): a free web service, with FIRST FLIGHT's **own database** on the existing `visaboard-db` server.
+
+- **Build command:** `npm ci --include=dev && npm run render-build`
+  - Creates the `firstflight` database if it's missing, runs the migrations, loads sample data only into an empty database (when `SEED_ON_EMPTY=true`), then builds.
+- **Start command:** `npm run start`
+- **Environment variables:**
+  - `DATABASE_URL`: the server's *Internal Database URL* with the database name at the end changed to `/firstflight`
+  - `SEED_PASSWORD`: password for the demo accounts
+  - `SEED_ON_EMPTY=true`: demo only; remove it for production
+  - `NEXT_PUBLIC_SAMPLE_DATA=true`: shows the "sample data" notice
+  - `UPLOAD_DIR=./storage/uploads`
+
+**Before real clients use it:**
+1. Move to a paid database and a paid web service with a **Disk** at `/var/data`.
+2. Set `UPLOAD_DIR=/var/data/uploads`.
+3. Remove `SEED_ON_EMPTY` and `NEXT_PUBLIC_SAMPLE_DATA`.
+4. Create the real administrator from the Render Shell:
    ```bash
    npx tsx scripts/create-admin.ts "Full Name" admin@yourdomain.com 'a-strong-password'
    ```
-5. **Real content.** Add it through the Content Manager in Phase 3, or ask us to import FIRST FLIGHT's real listings.
+
+Free web services sleep after inactivity: the first visit after a quiet period takes up to about a minute. Free services also have no disk, so uploaded documents are lost when the service restarts.
 
 ## Project structure
 

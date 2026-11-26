@@ -11,7 +11,10 @@
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx --env-file=.env src/db/seed.ts",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "db:ensure": "tsx scripts/ensure-database.ts",
+    "db:seed-if-empty": "tsx scripts/seed-if-empty.ts",
+    "render-build": "npm run db:ensure && npm run db:migrate && npm run db:seed-if-empty && next build"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -39,5 +42,8 @@
     "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^3.2.7"
+  },
+  "engines": {
+    "node": ">=20.9"
   }
 }
