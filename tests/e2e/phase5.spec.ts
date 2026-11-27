@@ -60,55 +60,80 @@ test.describe.serial("phase 5: fees, refunds, changes and flights", () => {
     await f.close(); await c.close(); await k.close(); await a.close();
   });
 
-  test("refunds: client asks, finance approves, client fills the form, finance pays", async ({ browser }) => {
+  test("refunds: client signs the online form; consultant, Finance and admin review; Finance pays", async ({ browser }) => {
     const f = await as(browser, "finance@firstflight.test");
     await openDemo(f.page);
     // Pay the deposit invoice (first instalment).
     const deposit = f.page.locator("li", { hasText: "Instalment 1 of 3: Deposit" }).first();
     await deposit.getByText(/Record a payment on/).click();
     await deposit.getByLabel(/Amount \(EUR\)/).fill("600");
-    await deposit.getByLabel("Payment reference").fill(`DEP-${stamp}`);
+    await deposit.getByLabel("Payment reference", { exact: true }).fill(`DEP-${stamp}`);
     await deposit.getByLabel("Date paid").fill(new Date().toISOString().slice(0, 10));
     await deposit.getByRole("button", { name: "Record payment and issue receipt" }).click();
     await expect(deposit.getByRole("link", { name: /^Receipt RC-/ })).toBeVisible();
 
     const c = await as(browser, "client@firstflight.test");
     await openDemo(c.page);
-    await c.page.getByText("Request a refund").click();
-    const opt = await c.page.getByLabel("Payment to refund").locator("option", { hasText: "Deposit" }).getAttribute("value");
-    await c.page.getByLabel("Payment to refund").selectOption(opt!);
-    await c.page.getByLabel("Why are you asking for a refund?").fill("My employer cancelled the placement before the start date.");
-    await c.page.getByRole("button", { name: "Send refund request" }).click();
-    await ok(c.page, /Refund request RF-\d{4}-\d{4} sent/);
+    await c.page.getByText("Request a refund or reapply").click();
+    await expect(c.page.getByTestId("refund-eligibility")).toContainText("You can request a refund");
+    const form = c.page.locator("#refund-form");
+    const opt = await form.getByLabel("Payment to refund").locator("option", { hasText: "Deposit" }).getAttribute("value");
+    await form.getByLabel("Payment to refund").selectOption(opt!);
+    await form.getByLabel("Reason").fill("My employer cancelled the placement before the start date.");
+    await form.getByLabel("Amount asked for").fill("700");
+    await form.getByLabel("Name on the account").fill("Aline Uwase");
+    await form.getByLabel("Mobile money number, or bank and account number").fill("+250 788 000 111");
+    await form.getByLabel(/I confirm this information is correct/).check();
+    await form.getByLabel("Type your full name to sign").fill("Aline Uwase");
+    await form.getByRole("button", { name: "Sign and submit" }).click();
+    await expect(form.getByRole("alert").filter({ hasText: "€600" })).toBeVisible();
+    await form.getByLabel("Amount asked for").fill("600");
+    await form.getByRole("button", { name: "Sign and submit" }).click();
+    await ok(c.page, /Refund request RF-\d{4}-\d{4} submitted/);
 
-    await f.page.goto("/staff/finance/refunds");
-    const req = f.page.locator("article", { hasText: "My employer cancelled" });
-    await req.getByRole("button", { name: "Approve and open the refund form" }).click();
-    await expect(req.getByText("Waiting for the client to fill in the refund form.")).toBeVisible();
+    // Consultant: reviews without seeing amounts or account details, and can't approve or pay.
+    const k = await as(browser, "consultant@firstflight.test");
+    await k.page.goto("/staff/refunds");
+    const kc = k.page.getByTestId("refund-card").filter({ hasText: "My employer cancelled" });
+    await expect(kc.getByText("+250 788 000 111")).toHaveCount(0);
+    await expect(kc.getByRole("button", { name: /Approve|Record refund/ })).toHaveCount(0);
+    await kc.getByLabel("I support it").check();
+    await kc.getByPlaceholder(/What you know about the case/).fill("Employer withdrew the offer; confirmed by email.");
+    await kc.getByRole("button", { name: "Send to Finance" }).click();
+    await ok(k.page, /sent to Finance/);
 
-    await c.page.reload();
-    await c.page.getByLabel(/^Amount \(EUR; up to/).fill("700");
-    await c.page.getByLabel("Name on the account").fill("Aline Uwase");
-    await c.page.getByLabel("Mobile money number, or bank and account number").fill("+250 788 000 111");
-    await c.page.getByLabel(/I confirm these details are correct/).check();
-    await c.page.getByRole("button", { name: "Send refund form" }).click();
-    await expect(c.page.getByRole("alert").filter({ hasText: "at most €600" })).toBeVisible();
-    await c.page.getByLabel(/^Amount \(EUR; up to/).fill("600");
-    await c.page.getByRole("button", { name: "Send refund form" }).click();
-    await expect(c.page.getByText("Form received: payment pending")).toBeVisible();
-
-    await f.page.reload();
+    await f.page.goto("/staff/refunds");
+    const req = f.page.getByTestId("refund-card").filter({ hasText: "My employer cancelled" });
     await expect(req.getByText("+250 788 000 111")).toBeVisible();
+    await req.getByLabel(/Amount Finance recommends/).fill("600");
+    await req.getByPlaceholder(/What you checked/).fill("Deposit of €600 received and nothing spent yet.");
+    await req.getByRole("button", { name: "Send for admin approval" }).click();
+    await ok(f.page, /sent for admin approval/);
+
+    const a = await as(browser, "admin@firstflight.test");
+    await a.page.goto("/staff/refunds");
+    const ar = a.page.getByTestId("refund-card").filter({ hasText: "My employer cancelled" });
+    await ar.getByPlaceholder("Note to the client").fill("Approved in full: the employer cancelled.");
+    await ar.getByRole("button", { name: "Approve" }).click();
+    await ok(a.page, /approved/);
+
+    await f.page.goto("/staff/refunds");
+    await req.getByRole("button", { name: "Start processing the payment" }).click();
+    await ok(f.page, /being processed/);
+    await f.page.reload();
     await req.getByLabel("Transfer reference").fill(`RFD-${stamp}`);
+    await req.getByLabel("Date paid").fill(new Date().toISOString().slice(0, 10));
     await req.getByRole("button", { name: "Record refund as paid" }).click();
-    await expect(req).toHaveCount(0);
+    await ok(f.page, /completed/);
     await f.page.goto("/staff/finance/report");
     await expect(f.page.getByRole("heading", { name: "Refunds paid" })).toBeVisible();
     await expect(f.page.getByText(`RFD-${stamp}`)).toBeVisible();
 
-    await c.page.reload();
-    await expect(c.page.getByText("Refunded", { exact: true })).toBeVisible();
-    await f.close(); await c.close();
+    await c.page.goto("/portal/refunds");
+    const row = c.page.getByTestId("refund-row").first();
+    await expect(row.getByText("Completed", { exact: true })).toBeVisible();
+    await expect(row.getByText(`RFD-${stamp}`, { exact: false })).toBeVisible();
+    await f.close(); await c.close(); await k.close(); await a.close();
   });
 
   test("a change request is decided by the consultant", async ({ browser }) => {

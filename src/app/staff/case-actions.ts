@@ -1,6 +1,8 @@
 "use server";
 // Consultant (and admin) case work on one application. Every action re-checks access on the server,
 // writes the change and its activity record in one transaction, then notifies and emails after it commits.
+import { stageBlock } from "@/lib/stage-rules";
+import { factsFor } from "@/lib/progress";
 import { revalidatePath } from "next/cache";
 import { and, eq, max } from "drizzle-orm";
 import { db, schema as s } from "@/db";
@@ -37,7 +39,7 @@ export async function reviewDocument(_: CaseState, fd: FormData): Promise<CaseSt
   if (!item.documents.length) return { error: "Nothing has been uploaded for this item yet." };
   const state = decision === "verify" ? "VERIFIED" : "REJECTED";
   await db.transaction(async (tx) => {
-    await tx.update(s.checklistItems).set({ state, note: decision === "reject" ? reason : null }).where(eq(s.checklistItems.id, item.id));
+    await tx.update(s.checklistItems).set({ state, note: decision === "reject" ? reason : null, reviewedById: user.id, reviewedAt: new Date() }).where(eq(s.checklistItems.id, item.id));
     await logActivity(tx, { actorId: user.id, action: decision === "verify" ? "document.verified" : "document.rejected", entityType: "checklist_item", entityId: item.id, applicationId: app.id,
       summary: `${user.name} ${decision === "verify" ? "verified" : "rejected"} "${item.label}" on ${app.reference}`, changes: { state: [item.state, state], reason: decision === "reject" ? reason : undefined } });
     await notify(tx, { userId: app.clientId, title: decision === "verify" ? "Document verified" : "Document needs re-uploading", body: decision === "verify" ? `${item.label} (${app.reference}) was accepted.` : `${item.label} (${app.reference}): ${reason}`, link: clientLink(app.id) });
@@ -79,13 +81,19 @@ export async function updateProgress(_: CaseState, fd: FormData): Promise<CaseSt
   if (finalStage === app.stage && status === app.status) return { error: "Nothing changed." };
   if (status !== "ACTIVE" && status !== "COMPLETED" && message.length < 5) return { error: "Explain the decision to the client in the message box." };
   const what = status === "ACTIVE" ? `moved to ${STAGE_LABEL[finalStage]}` : `marked ${label(status).toLowerCase()}`;
-  await db.transaction(async (tx) => {
+  const blocked = await db.transaction(async (tx) => {
+    // Stage locks: re-check payments and the contract inside the transaction, with the application row locked.
+    await tx.select({ id: s.applications.id }).from(s.applications).where(eq(s.applications.id, app.id)).for("update");
+    const forward = status === "COMPLETED" || STAGES.indexOf(finalStage) > STAGES.indexOf(app.stage as (typeof STAGES)[number]);
+    if (forward) { const why = stageBlock(finalStage, status === "COMPLETED", await factsFor(tx, app.id)); if (why) return why; }
     await tx.update(s.applications).set({ stage: finalStage, status }).where(eq(s.applications.id, app.id));
     if (message) await tx.insert(s.applicationUpdates).values({ applicationId: app.id, authorId: user.id, body: message, visibility: "CLIENT" });
     await logActivity(tx, { actorId: user.id, action: "application.progress", entityType: "application", entityId: app.id, applicationId: app.id,
       summary: `${user.name} ${what}: ${app.reference}`, changes: { stage: [app.stage, finalStage], status: [app.status, status] } });
     await notify(tx, { userId: app.clientId, title: "Application updated", body: `${app.reference} ${what}.`, link: clientLink(app.id) });
+    return null;
   });
+  if (blocked) return { error: blocked };
   await emailUser(app.clientId, `Update on ${app.reference}`, `Your application ${app.reference} has been ${what}.${message ? `\n\nMessage from your consultant:\n${message}` : ""}`, clientLink(app.id));
   refresh(app.id);
   return { ok: `Application ${what}.` };

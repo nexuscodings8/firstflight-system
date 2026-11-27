@@ -37,7 +37,8 @@ export function ApplicationView({ app, mode, canUpload, itemTools, checklistFoot
                 <li key={c.id} className="py-4">
                   <div className="flex flex-wrap items-center justify-between gap-2"><span className="font-semibold">{c.label}{!c.mandatory && <span className="ml-2 text-xs font-normal muted">Optional</span>}</span><span className={`badge ${cls}`}>{t}</span></div>
                   {c.note && <p className="mt-1 rounded-lg bg-amber-50 p-2 text-sm text-amber-900">{c.note}</p>}
-                  {c.documents.length > 0 && <ul className="mt-2 space-y-1 text-sm">{c.documents.map((d) => <li key={d.id}><a className="inline-flex items-center gap-1.5 text-brand underline" href={`/api/documents/${d.id}`}><Icon name="file" className="size-4" />{d.fileName}</a> <span className="muted">· {dateTime(d.createdAt)}</span></li>)}</ul>}
+                  {c.documents.length > 0 && <ul className="mt-2 space-y-1 text-sm">{c.documents.map((d) => <li key={d.id} className="flex flex-wrap items-center gap-x-2"><a className="inline-flex items-center gap-1.5 text-brand underline" href={`/${mode === "client" ? "portal" : "staff"}/viewer/document/${d.id}`}><Icon name="file" className="size-4" />{d.fileName}</a><span className="muted">· {dateTime(d.createdAt)}</span><a className="text-xs font-semibold text-brand underline" href={`/api/documents/${d.id}`}>Download</a></li>)}</ul>}
+                  {c.reviewedAt && (c.state === "VERIFIED" || c.state === "REJECTED") && <p className="mt-1 text-xs muted">{c.state === "VERIFIED" ? "Verified" : "Rejected"} by {c.reviewedBy?.name ?? "staff"} on {dateTime(c.reviewedAt)}</p>}
                   {canUpload && app.status === "ACTIVE" && c.state !== "VERIFIED" && <UploadForm applicationId={app.id} itemId={c.id} label={c.label} />}
                   {itemTools?.(c)}
                 </li>

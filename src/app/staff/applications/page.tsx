@@ -21,9 +21,10 @@ export default async function StaffApplications({ searchParams }: { searchParams
   if (user.role === "CONSULTANT") w.push(eq(s.applications.consultantId, user.id));
   if (stage) w.push(eq(s.applications.stage, stage));
   if (sp.unassigned === "1") w.push(isNull(s.applications.consultantId));
+  if (sp.consultant && user.role === "ADMIN") w.push(eq(s.applications.consultantId, sp.consultant));
   if (q) w.push(or(ilike(s.applications.reference, `%${q.replace(/[%_\\]/g, "")}%`), inArray(s.applications.clientId, db.select({ id: s.users.id }).from(s.users).where(ilike(s.users.name, `%${q.replace(/[%_\\]/g, "")}%`))))!);
   const [rows, consultants] = await Promise.all([
-    db.query.applications.findMany({ where: and(...w), orderBy: [desc(s.applications.createdAt)], limit: 300, with: { client: { columns: { name: true } }, consultant: { columns: { name: true } }, checklist: { columns: { state: true } }, invoices: { columns: { status: true, dueDate: true, amount: true, currency: true }, with: { payments: { columns: { amount: true } } } }, amendments: { columns: { status: true } } } }),
+    db.query.applications.findMany({ where: and(...w), orderBy: [desc(s.applications.createdAt)], limit: 300, with: { client: { columns: { name: true } }, consultant: { columns: { name: true } }, checklist: { columns: { state: true } }, invoices: { columns: { status: true, dueDate: true, amount: true, currency: true }, with: { payments: { columns: { amount: true } } } }, amendments: { columns: { status: true, source: true } } } }),
     user.role === "ADMIN" ? db.select({ id: s.users.id, name: s.users.name }).from(s.users).where(and(eq(s.users.role, "CONSULTANT"), eq(s.users.active, true))) : [],
   ]);
   const list = sp.check === "1" ? rows.filter((a) => a.checklist.some((c) => c.state === "UPLOADED")) : rows;
@@ -49,7 +50,7 @@ export default async function StaffApplications({ searchParams }: { searchParams
             {list.map((a) => {
               const [ct, cc] = clearance(a.invoices, now);
               const toCheck = a.checklist.filter((c) => c.state === "UPLOADED").length;
-              const changes = a.amendments.filter((m) => m.status === "REQUESTED").length;
+              const changes = a.amendments.filter((m) => m.source === "CLIENT" && m.status === "REQUESTED").length;
               const due = new Map<string, number>();
               for (const i of a.invoices) if (i.status !== "VOID") due.set(i.currency, (due.get(i.currency) ?? 0) + balanceOf(i).due);
               return (
@@ -61,13 +62,13 @@ export default async function StaffApplications({ searchParams }: { searchParams
                   <td className="px-3 pt-3"><span className="badge bg-brand/10 text-brand">{a.status === "ACTIVE" ? STAGE_LABEL[a.stage] : label(a.status)}</span></td>
                   <td className="px-3 pt-3"><span className={`badge ${cc}`}>{ct}</span></td>
                   {finance && <td className="px-3 pt-3 text-right font-semibold">{[...due].filter(([, c]) => c > 0).map(([c, v]) => money(fromCents(v), c)).join(" + ") || "—"}</td>}
-                  <td className="px-3 pt-2">{user.role === "ADMIN" && a.status === "ACTIVE" ? (
+                  <td className="px-3 pt-2">{user.role === "ADMIN" && a.status === "ACTIVE" && !a.consultantId ? (
                     <form action={assignConsultant} className="flex gap-1.5">
                       <input type="hidden" name="applicationId" value={a.id} />
                       <label className="sr-only" htmlFor={`c-${a.id}`}>Consultant for {a.reference}</label>
                       <select id={`c-${a.id}`} name="consultantId" defaultValue={a.consultantId ?? ""} className="input min-h-9 py-1 text-sm" required><option value="" disabled>Choose…</option>{consultants.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
-                      <button className="btn-primary btn-sm">{a.consultantId ? "Reassign" : "Assign"}</button>
-                    </form>) : <span className="inline-block pt-1">{a.consultant?.name ?? "Unassigned"}</span>}</td>
+                      <button className="btn-primary btn-sm">Assign</button>
+                    </form>) : <span className="inline-block pt-1">{a.consultant?.name ?? "Unassigned"}{user.role === "ADMIN" && a.consultantId && a.status === "ACTIVE" && <Link className="ml-2 text-xs text-brand underline" href={`/staff/applications/${a.id}#assignment`}>Change</Link>}</span>}</td>
                   <td className="px-3 pt-3">{date(a.createdAt)}</td>
                 </tr>
               );

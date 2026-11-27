@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { and, count, desc, eq, gte, like, lt, ne, notLike, or } from "drizzle-orm";
 import { db, schema as s } from "@/db";
+import { getOffice, currentTemplate, SERVICES } from "@/lib/settings";
 import { requireUser } from "@/lib/auth";
 import { siteUrl } from "@/lib/email";
 import { nowMs } from "@/lib/finance";
@@ -29,6 +30,9 @@ export default async function LaunchChecks() {
     db.select().from(s.emailLog).orderBy(desc(s.emailLog.createdAt)).limit(1).then((r) => r[0]),
     storageSelfTest(),
   ]);
+  const office = await getOffice();
+  const templates = await Promise.all(SERVICES.map((sv) => currentTemplate(sv)));
+  const sample = templates.filter((t) => t.body.includes("[SAMPLE TEXT"));
   const url = siteUrl();
   const upload = env.UPLOAD_DIR || "./storage/uploads";
   const emailOn = !!(env.RESEND_API_KEY && env.EMAIL_FROM);
@@ -46,6 +50,8 @@ export default async function LaunchChecks() {
       detail: storageError ? `Storage test failed: ${storageError}` : storageMode() === "object" ? `Object storage (bucket ${env.S3_BUCKET}); test write and read succeeded.` : upload.startsWith("/var/data") ? `Persistent disk at ${upload}; test write and read succeeded.` : `Files are kept in ${upload} on the server itself and are lost whenever the service restarts or redeploys.`,
       fix: "Either add a Render persistent disk at /var/data and set UPLOAD_DIR=/var/data/uploads (paid plan), or connect Cloudflare R2 / S3 with S3_BUCKET, S3_ENDPOINT, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY.",
     },
+    { area: "Setup", name: "Office address and map link confirmed", state: office.confirmed ? "pass" : "fail", detail: office.confirmed ? `${office.address} · ${office.mapsUrl}` : "Appointment invitations use a placeholder address until an administrator saves the real one.", fix: "Enter FIRST FLIGHT's office address and its Google Maps link in Settings.", href: "/staff/settings?tab=office" },
+    { area: "Setup", name: "Contract wording replaced", state: sample.length ? "fail" : "pass", detail: sample.length ? `Clients would sign sample wording for: ${sample.map((t) => t.service).join(", ")}.` : "Every service has its own contract text.", fix: "Paste FIRST FLIGHT's lawyer-approved contract for each service in Settings → Contracts.", href: "/staff/settings?tab=contracts" },
     { area: "Content", name: "Published job offers", state: jobs ? "pass" : "warn", detail: `${jobs} published.`, fix: "Add FIRST FLIGHT's real job offers under Content.", href: "/staff/content/jobs" },
     { area: "Content", name: "Published study programs", state: programs ? "pass" : "warn", detail: `${programs} published.`, fix: "Add the real universities and programs under Content.", href: "/staff/content/programs" },
     { area: "Content", name: "Visa guidance checked", state: visaOverdue ? "warn" : visaCurrent ? "pass" : "warn", detail: `${visaCurrent} current; ${visaOverdue} flagged or not checked for ${STALE_AFTER_DAYS} days (visitors get a consultation offer for those).`, fix: "Check the entries in the review queue against their official sources.", href: "/staff/content/visa-review" },

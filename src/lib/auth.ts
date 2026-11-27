@@ -1,13 +1,20 @@
 import "server-only";
 import { redirect } from "next/navigation";
+import { eq } from "drizzle-orm";
+import { db, schema } from "@/db";
 import { readSessionUser } from "./session";
 import type { Role } from "./permissions";
 
-export type CurrentUser = { id: string; name: string; email: string; role: Role; mustChangePassword: boolean };
+export type CurrentUser = { id: string; name: string; email: string; role: Role; mustChangePassword: boolean; services?: string[] };
 
+/** The signed-in person. Consultants also carry the services an admin has granted them (checked on every request). */
 export async function getCurrentUser(): Promise<CurrentUser | null> {
   const u = await readSessionUser();
-  return u ? { id: u.id, name: u.name, email: u.email, role: u.role, mustChangePassword: u.mustChangePassword } : null;
+  if (!u) return null;
+  const services = u.role === "CONSULTANT"
+    ? (await db.select({ service: schema.consultantServices.service }).from(schema.consultantServices).where(eq(schema.consultantServices.userId, u.id))).map((r) => r.service)
+    : undefined;
+  return { id: u.id, name: u.name, email: u.email, role: u.role, mustChangePassword: u.mustChangePassword, services };
 }
 
 /**

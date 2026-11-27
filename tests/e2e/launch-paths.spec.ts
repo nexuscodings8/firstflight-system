@@ -51,13 +51,12 @@ test.describe.serial("launch paths", () => {
     await expect(item.getByText("Uploaded, awaiting check")).toBeVisible();
     await expect(item.getByRole("link", { name: "sample.pdf" })).toBeVisible();
 
-    // Applying again for the same job opens the existing application instead of a duplicate.
+    // One active application per client: the apply page offers the open application instead of a form.
     await page.goto("/work/germany");
     await page.getByRole("link", { name: /Care assistant, elderly care/ }).click();
     await page.getByRole("link", { name: "Apply for this job" }).click();
-    await page.getByRole("checkbox").check();
-    await page.getByRole("button", { name: "Submit application" }).click();
-    await expect(page.getByText("You already have an active application")).toBeVisible();
+    await expect(page.getByText(/You already have an application in progress/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Submit application" })).toHaveCount(0);
   });
 
   test("admin assigns the application; consultant sees it and can open the document", async ({ page, browser }) => {
@@ -67,7 +66,8 @@ test.describe.serial("launch paths", () => {
     const row = page.locator("tr", { hasText: client.name });
     await row.getByRole("combobox").selectOption({ label: "Sandrine Umutoni" });
     await row.getByRole("button", { name: "Assign" }).click();
-    await expect(page.locator("tr", { hasText: client.name }).getByRole("button", { name: "Reassign" })).toBeVisible();
+    // Reassigning (with a reason) happens on the application page; the list links to it.
+    await expect(page.locator("tr", { hasText: client.name }).getByRole("link", { name: "Change" })).toBeVisible();
 
     const ctx = await browser.newContext();
     const c = await ctx.newPage();
@@ -76,8 +76,11 @@ test.describe.serial("launch paths", () => {
     await c.locator("tr", { hasText: client.name }).getByRole("link").first().click();
     await expect(c).toHaveURL(/\/staff\/applications\//);
     await expect(c.locator("main").getByText(/Consultant:\s*Sandrine Umutoni/)).toBeVisible();
-    const dl = c.waitForEvent("download");
+    // The file opens in the viewer (preview with the review tools); Download saves it.
     await c.getByRole("link", { name: "sample.pdf" }).click();
+    await expect(c.getByTestId("pdf-frame")).toBeVisible();
+    const dl = c.waitForEvent("download");
+    await c.getByRole("link", { name: "Download", exact: true }).click();
     expect((await dl).suggestedFilename()).toBe("sample.pdf");
     await ctx.close();
   });

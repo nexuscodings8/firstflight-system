@@ -7,6 +7,8 @@ import { Breadcrumbs } from "@/components/breadcrumbs";
 import { AvailabilityBadge, canApply } from "@/components/badges";
 import { Checklist } from "@/components/checklist";
 import { Icon } from "@/components/icons";
+import { PublicFee } from "@/components/public-fee";
+import { publicFee } from "@/lib/public-fee";
 import { date, label, tuitionText } from "@/lib/format";
 
 type P = { params: Promise<{ continent: string; country: string; university: string; program: string }>; searchParams: Promise<Record<string, string | undefined>> };
@@ -21,6 +23,7 @@ export default async function ProgramPage({ params, searchParams }: P) {
   const preview = await previewMode(await searchParams);
   const p = await getProgram(program, preview);
   if (!p || p.university.slug !== university || p.university.country.slug !== country || p.university.country.continent?.slug !== continent) notFound();
+  const fee = await publicFee({ service: "STUDY", programId: p.id, universityId: p.universityId, countryId: p.university.countryId });
   const facts: [string, string, string][] = [
     ["cap", "Study level", label(p.level)],
     ["calendar", "Intake", p.intakes.join(", ")],
@@ -48,6 +51,7 @@ export default async function ProgramPage({ params, searchParams }: P) {
           <div className="card p-6">
             <h2 className="text-xl">Document checklist</h2>
             <Checklist items={p.requirements} />
+            <PublicFee fee={fee} />
             {canApply(p.availability) && <Link href={`/apply?program=${p.id}`} className="btn-gold mt-5 w-full">Apply for this program</Link>}
             <Link href={`/enquire?type=PROGRAM_GUIDANCE&program=${p.id}`} className="btn-ghost mt-2 w-full">Request guidance</Link>
           </div>

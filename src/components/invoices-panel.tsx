@@ -7,6 +7,8 @@ import { CURRENCIES, PAYMENT_METHOD_LABEL, balanceOf, fromCents } from "@/lib/fi
 import { date, label, money } from "@/lib/format";
 import type { FullApplication } from "@/lib/applications";
 import { ActionForm } from "./action-form";
+import { PaymentSubmitForm } from "./payment-submit-form";
+import { sendToClient } from "@/app/staff/finance/billing-actions";
 
 export const INVOICE_BADGE: Record<string, string> = {
   ISSUED: "bg-amber-50 text-amber-800", PARTIALLY_PAID: "bg-blue-50 text-brand", PAID: "bg-emerald-50 text-emerald-700", VOID: "bg-slate-100 text-slate-500", DRAFT: "bg-slate-100 text-slate-600",
@@ -78,6 +80,7 @@ function FeePlanBox({ app, rules, finance }: { app: FullApplication; rules: Rule
 export function InvoicesPanel({ app, mode, rules = [] }: { app: FullApplication; mode: "client" | "finance" | "summary"; rules?: RuleChoice[] }) {
   if (mode === "summary") return <Clearance app={app} />;
   const invs = [...app.invoices].sort((a, b) => +a.createdAt - +b.createdAt);
+  const subs = app.paymentSubmissions ?? [];
   const open = invs.filter((i) => i.status !== "VOID");
   const byCur = new Map<string, number>();
   for (const i of open) byCur.set(i.currency, (byCur.get(i.currency) ?? 0) + balanceOf(i).due);
@@ -103,9 +106,35 @@ export function InvoicesPanel({ app, mode, rules = [] }: { app: FullApplication;
                 </div>
                 <span className={`badge ${INVOICE_BADGE[inv.status]}`}>{inv.status === "PARTIALLY_PAID" ? "Part paid" : label(inv.status)}</span>
               </div>
+              {inv.status !== "VOID" && (
+                <div className="mt-1 flex flex-wrap items-center gap-3 text-sm">
+                  <a className="text-brand underline" href={`/billing/invoices/${inv.id}/pdf`}>Download PDF</a>
+                  {mode === "finance" && <ActionForm action={sendToClient} submit={inv.sentAt ? `Sent ${date(inv.sentAt)}: send again` : "Send invoice to client"} className="grid" buttonClass="text-sm font-semibold text-brand underline" resetOnSuccess={false}><input type="hidden" name="kind" value="invoice" /><input type="hidden" name="id" value={inv.id} /></ActionForm>}
+                </div>
+              )}
+              {subs.filter((x) => x.invoiceId === inv.id && x.status !== "APPROVED").map((x) => (
+                <p key={x.id} className={`mt-2 rounded-lg px-3 py-2 text-sm ${x.status === "PENDING" ? "bg-blue-50" : "bg-red-50"}`}>
+                  {x.status === "PENDING" ? "Waiting for Finance: " : "Not accepted: "}{money(x.amount, inv.currency)} · {PAYMENT_METHOD_LABEL[x.method]}{x.loanFunded ? ` (loan: ${x.loanProvider})` : ""} · {x.reference} · submitted {date(x.createdAt)}
+                  {x.status === "REJECTED" && x.rejectionReason && <span className="block font-semibold text-red-800">{x.rejectionReason}</span>}
+                  {x.status === "PENDING" && mode === "finance" && <Link className="ml-2 font-semibold text-brand underline" href="/staff/finance/verify">Verify</Link>}
+                </p>
+              ))}
+              {mode === "client" && (inv.status === "ISSUED" || inv.status === "PARTIALLY_PAID") && (
+                <details className="mt-3 rounded-xl border border-line p-3">
+                  <summary className="cursor-pointer text-sm font-semibold text-brand">I&apos;ve paid {inv.number}: submit payment</summary>
+                  <PaymentSubmitForm invoiceId={inv.id} number={inv.number} currency={inv.currency} due={fromCents(Math.max(b.due - subs.filter((x) => x.invoiceId === inv.id && x.status === "PENDING").reduce((n, x) => n + Math.round(Number(x.amount) * 100), 0), 0))} />
+                </details>
+              )}
               {inv.payments.length > 0 && (
                 <ul className="mt-2 space-y-1 text-sm">
-                  {inv.payments.map((p) => <li key={p.id} className="rounded-lg bg-mist px-3 py-1.5">{money(p.amount, inv.currency)} · {PAYMENT_METHOD_LABEL[p.method]} · {date(p.paidAt)} · {links ? <Link className="font-semibold text-brand underline" href={`/billing/receipts/${p.id}`}>Receipt {p.receiptNumber}</Link> : `Receipt ${p.receiptNumber}`}</li>)}
+                  {inv.payments.map((p) => (
+                    <li key={p.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-mist px-3 py-1.5">
+                      <span>{money(p.amount, inv.currency)} · {PAYMENT_METHOD_LABEL[p.method]}{p.loanFunded ? ` (loan: ${p.loanProvider})` : ""} · {date(p.paidAt)} ·</span>
+                      <Link className="font-semibold text-brand underline" href={`/billing/receipts/${p.id}`}>Receipt {p.receiptNumber}</Link>
+                      <a className="text-brand underline" href={`/billing/receipts/${p.id}/pdf`}>PDF</a>
+                      {mode === "finance" && <ActionForm action={sendToClient} submit={p.receiptSentAt ? "Send again" : "Send receipt to client"} className="ml-auto grid" buttonClass="text-xs font-semibold text-brand underline" resetOnSuccess={false}><input type="hidden" name="kind" value="receipt" /><input type="hidden" name="id" value={p.id} /></ActionForm>}
+                    </li>
+                  ))}
                 </ul>
               )}
               {mode === "finance" && inv.status !== "VOID" && b.due > 0 && (
@@ -118,6 +147,8 @@ export function InvoicesPanel({ app, mode, rules = [] }: { app: FullApplication;
                     <div><label className="label" htmlFor={`pr-${inv.id}`}>Payment reference</label><input id={`pr-${inv.id}`} name="reference" className="input" placeholder="Transaction ID or cash book number" required maxLength={80} /></div>
                     <div><label className="label" htmlFor={`pd-${inv.id}`}>Date paid</label><input id={`pd-${inv.id}`} name="paidAt" type="date" className="input" required /></div>
                     <div className="sm:col-span-2"><label className="label" htmlFor={`pn-${inv.id}`}>Note (optional)</label><input id={`pn-${inv.id}`} name="note" className="input" maxLength={300} /></div>
+                    <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="loanFunded" className="size-4 accent-brand" /> Loan-funded (validated)</label>
+                    <div><label className="sr-only" htmlFor={`pl-${inv.id}`}>Loan provider</label><input id={`pl-${inv.id}`} name="loanProvider" className="input" placeholder="Loan provider, if loan-funded" maxLength={120} /></div>
                   </ActionForm>
                 </details>
               )}

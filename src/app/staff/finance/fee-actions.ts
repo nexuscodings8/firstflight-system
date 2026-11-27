@@ -6,10 +6,10 @@ import { db, schema as s } from "@/db";
 import { requireUser } from "@/lib/auth";
 import { logActivity, notify } from "@/lib/activity";
 import { emailUser } from "@/lib/email";
-import { nextRef } from "@/lib/refs";
 import { CURRENCIES, fromCents, parseAmount } from "@/lib/finance";
-import { addDays, matchingRules, splitAmount, validateInstallments, type FeePlan, type Installment, type Scope } from "@/lib/fees";
+import { matchingRules, validateInstallments, type FeePlan, type Installment, type Scope } from "@/lib/fees";
 import { scopeOf } from "@/lib/fee-scope";
+import { applyPlan } from "@/lib/fee-plan";
 import { money } from "@/lib/format";
 
 export type FeeState = { ok?: string; error?: string } | undefined;
@@ -97,19 +97,9 @@ export async function applyFeePlan(_: FeeState, fd: FormData): Promise<FeeState>
   const rule = await db.query.feeRules.findFirst({ where: eq(s.feeRules.id, str(fd, "ruleId", 64)) });
   if (!rule) return { error: "Choose a fee." };
   if (!matchingRules([rule], await scopeOf(app)).length) return { error: "That fee doesn't apply to this application." };
-  const inst = rule.installments as Installment[];
-  const parts = splitAmount(Math.round(Number(rule.amount) * 100), inst.map((i) => i.percent));
-  const now = new Date();
   const plan = await db.transaction(async (tx) => {
-    const rows: FeePlan["installments"] = [];
-    for (const [i, x] of inst.entries()) {
-      const number = await nextRef(tx, "INV");
-      const due = addDays(now, x.dueDays);
-      const [inv] = await tx.insert(s.invoices).values({ number, applicationId: app.id, description: inst.length > 1 ? `Instalment ${i + 1} of ${inst.length}: ${x.label}` : x.label, amount: fromCents(parts[i]), currency: rule.currency, dueDate: due, status: "ISSUED", createdById: user.id }).returning();
-      rows.push({ label: x.label, amount: inv.amount, dueDate: due.toISOString(), invoiceId: inv.id, invoiceNumber: number });
-    }
-    const p: FeePlan = { ruleId: rule.id, ruleName: rule.name, amount: rule.amount, currency: rule.currency, appliedAt: now.toISOString(), appliedBy: user.name, installments: rows };
-    await tx.update(s.applications).set({ feePlan: p }).where(eq(s.applications.id, app.id));
+    const p = await applyPlan(tx, app, rule, user);
+    const rows = p.installments;
     await logActivity(tx, { actorId: user.id, action: "fee.applied", entityType: "application", entityId: app.id, applicationId: app.id, summary: `${user.name} applied fee "${rule.name}" (${money(rule.amount, rule.currency)} in ${rows.length} instalment${rows.length === 1 ? "" : "s"}) to ${app.reference}` });
     await notify(tx, { userId: app.clientId, title: "Your service fee", body: `${app.reference}: ${money(rule.amount, rule.currency)} in ${rows.length} instalment${rows.length === 1 ? "" : "s"}. First due ${due0(rows)}.`, link: `/portal/applications/${app.id}` });
     return p;

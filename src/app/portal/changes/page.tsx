@@ -10,7 +10,7 @@ export const metadata = { title: "Service amendments" };
 export default async function Changes() {
   const user = await requireUser(["CLIENT"], "/portal/changes");
   const apps = await clientApps(user.id);
-  const rows = apps.flatMap((a) => a.amendments.map((m) => ({ m, a })));
+  const rows = apps.flatMap((a) => a.amendments.filter((m) => m.source === "CLIENT").map((m) => ({ m, a })));
   const active = apps.filter((a) => a.status === "ACTIVE");
   return (
     <div className="grid gap-5">

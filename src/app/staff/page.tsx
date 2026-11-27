@@ -78,10 +78,10 @@ export default async function Overview() {
 
   if (user.role === "CONSULTANT") {
     const mine = and(eq(s.applications.consultantId, user.id), eq(s.applications.status, "ACTIVE"));
-    const apps = await db.query.applications.findMany({ where: mine, orderBy: [asc(s.applications.createdAt)], with: { ...base, checklist: { columns: { state: true } }, amendments: { columns: { status: true } } } });
+    const apps = await db.query.applications.findMany({ where: mine, orderBy: [asc(s.applications.createdAt)], with: { ...base, checklist: { columns: { state: true } }, amendments: { columns: { status: true, source: true } } } });
     const enq = await n(db.select({ n: count() }).from(s.enquiries).where(eq(s.enquiries.status, "NEW")));
     const attention = apps.map((a) => {
-      const check = a.checklist.filter((c) => c.state === "UPLOADED").length, change = a.amendments.some((m) => m.status === "REQUESTED");
+      const check = a.checklist.filter((c) => c.state === "UPLOADED").length, change = a.amendments.some((m) => m.source === "CLIENT" && m.status === "REQUESTED");
       return { ...a, note: check ? `${check} document${check === 1 ? "" : "s"} to check` : change ? "Change requested" : a.stage === "ELIGIBILITY_REVIEW" ? "Eligibility to decide" : undefined };
     }).filter((a) => a.note);
     return (
@@ -102,7 +102,7 @@ export default async function Overview() {
     const now = new Date(nowMs());
     const [open, refunds, monthPays] = await Promise.all([
       db.query.invoices.findMany({ where: inArray(s.invoices.status, ["ISSUED", "PARTIALLY_PAID"]), orderBy: [asc(s.invoices.dueDate)], with: { payments: { columns: { amount: true } }, application: { columns: { id: true, reference: true }, with: base } } }),
-      n(db.select({ n: count() }).from(s.refundRequests).where(inArray(s.refundRequests.status, ["REQUESTED", "FORM_SUBMITTED"]))),
+      n(db.select({ n: count() }).from(s.refundRequests).where(inArray(s.refundRequests.state, ["FINANCE_REVIEW", "APPROVED", "PROCESSING"]))),
       (async () => { const [a, b] = monthRange(currentMonth())!; return db.select({ amount: s.payments.amount, currency: s.invoices.currency }).from(s.payments).innerJoin(s.invoices, eq(s.invoices.id, s.payments.invoiceId)).where(and(gte(s.payments.paidAt, a), lt(s.payments.paidAt, b))); })(),
     ]);
     const collected = new Map<string, number>();
@@ -115,7 +115,7 @@ export default async function Overview() {
           <Kpi label="Overdue invoices" value={overdue.length} icon="card" href="/staff/finance" />
           <Kpi label="Collected this month" value={[...collected].map(([c, v]) => money(fromCents(v), c)).join(" + ") || money(0, "USD")} icon="wallet" tone={1} href="/staff/finance/report" />
           <Kpi label="Outstanding" value={sumByCurrency(open, "due")} icon="receipt" tone={2} href="/staff/finance" />
-          <Kpi label="Refunds to handle" value={refunds} icon="refund" tone={3} href="/staff/finance/refunds" />
+          <Kpi label="Refunds to handle" value={refunds} icon="refund" tone={3} href="/staff/refunds" />
         </KpiRow>
         <div className="grid gap-5 xl:grid-cols-2">
           <CollectedByService />

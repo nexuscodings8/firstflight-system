@@ -7,6 +7,8 @@ import { pickGuidance } from "@/lib/visa-match";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Checklist } from "@/components/checklist";
 import { Icon } from "@/components/icons";
+import { PublicFee } from "@/components/public-fee";
+import { countryIdByIso, publicFee } from "@/lib/public-fee";
 import { date } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Your visa checklist" };
@@ -24,6 +26,7 @@ export default async function VisaResult({ searchParams }: { searchParams: Promi
   const qs = new URLSearchParams(Object.entries(inputs).filter(([, v]) => v)).toString();
   const summary = [["Passport", countryName(nat)], ["Residence", countryName(res)], ["Destination", `${city ? city + ", " : ""}${countryName(dest)}`], ["Purpose", cat.name]];
   const items = m.guidance ? [...m.guidance.requirements, ...(m.cityExtra?.requirements ?? [])] : [];
+  const fee = m.guidance ? await publicFee({ service: "VISA", visaCategoryId: m.guidance.categoryId, countryId: await countryIdByIso(dest) }) : null;
   const local = [m.guidance?.localGuidance, m.cityExtra?.localGuidance].filter(Boolean) as string[];
 
   return (
@@ -62,6 +65,7 @@ export default async function VisaResult({ searchParams }: { searchParams: Promi
             </div>
             <div className="card p-6">
               <h2 className="text-lg">Want us to handle it?</h2>
+              <PublicFee fee={fee} />
               <Link href={`/apply?visa=${m.guidance!.id}&${qs}`} className="btn-gold mt-3 w-full">Apply for visa processing</Link>
               <Link href={`/enquire?type=VISA_CONSULTATION&${qs}`} className="btn-ghost mt-2 w-full">Request a visa consultation</Link>
             </div>

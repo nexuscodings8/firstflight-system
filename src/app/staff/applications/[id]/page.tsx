@@ -13,6 +13,14 @@ import { clearance } from "@/components/clearance-badge";
 import { nextStep } from "@/lib/next-step";
 import { nowMs } from "@/lib/finance";
 import { RequestsPanel } from "@/components/requests-panel";
+import { AssignmentPanel } from "@/components/assignment-panel";
+import { ContractPanel } from "@/components/contract-panel";
+import { AppointmentsPanel } from "@/components/appointments-panel";
+import { getOffice } from "@/lib/settings";
+import { refundInfo } from "@/lib/refund-info";
+import { OPEN_STATES } from "@/lib/refunds";
+import { RefundForm } from "@/components/refund-form";
+import { openAppThread } from "@/app/staff/messages/actions";
 import { matchingRules } from "@/lib/fees";
 import { scopeOf } from "@/lib/fee-scope";
 import { ProgressForm, RequestDocumentForm, ReviewControls, UpdateForm } from "@/components/case-tools";
@@ -31,6 +39,7 @@ export default async function StaffApplication({ params }: { params: Promise<{ i
   const work = canWorkOnCase(user, app);
   const finance = canManageFinance(user);
   const rules = finance ? matchingRules(await db.select().from(s.feeRules), await scopeOf(app)) : [];
+  const paper = work || finance ? await refundInfo(app) : null;
   const history = await db.query.activities.findMany({ where: eq(s.activities.applicationId, app.id), orderBy: [desc(s.activities.createdAt)], limit: 40, with: { actor: { columns: { name: true } } } });
   return (
     <>
@@ -49,7 +58,26 @@ export default async function StaffApplication({ params }: { params: Promise<{ i
           <InvoicesPanel app={app} mode={finance ? "finance" : "summary"} rules={rules} />
           {work && <section className="card p-6"><h2 className="mb-3 text-xl">Progress</h2><ProgressForm applicationId={app.id} stage={app.stage} status={app.status} /></section>}
         </div>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <ContractPanel app={app} mode="staff" canWork={work} role={user.role} seeMoney={finance || user.role === "ADMIN"} />
+          {user.role !== "FINANCE" && <AppointmentsPanel app={app} mode="staff" canWork={work} office={work ? await getOffice() : undefined} />}
+        </div>
         <RequestsPanel app={app} mode="staff" canDecide={work} seeRefunds={finance} />
+        {(work || finance) && paper && (paper.refundOpen || paper.allowReapplication) && !app.refunds.some((r) => OPEN_STATES.includes(r.state)) && (
+          <details className="card p-6">
+            <summary className="cursor-pointer text-lg font-semibold text-brand">Record a paper refund or reapplication form</summary>
+            <p className="mt-2 text-sm muted">{paper.elig.text} Clients can print the blank form from <a className="font-semibold text-brand underline" href="/forms/refund">/forms/refund</a>.</p>
+            <div className="mt-3"><RefundForm applicationId={app.id} invoices={app.invoices} allowReapplication={paper.allowReapplication} refundOpen={paper.refundOpen} mode="paper" clientName={app.client.name} /></div>
+          </details>
+        )}
+        <section className="card flex flex-wrap items-center justify-between gap-3 p-6" aria-labelledby="disc-h">
+          <div><h2 id="disc-h" className="text-xl">Internal discussion</h2><p className="text-sm muted">Staff-only threads about this client. The client never sees them.</p></div>
+          <div className="flex flex-wrap gap-2">
+            <form action={openAppThread}><input type="hidden" name="applicationId" value={app.id} /><button className="btn-primary btn-sm">Open team thread</button></form>
+            {(finance || user.role === "ADMIN") && <form action={openAppThread}><input type="hidden" name="applicationId" value={app.id} /><input type="hidden" name="private" value="1" /><button className="btn-ghost btn-sm">Finance-only thread</button></form>}
+          </div>
+        </section>
+        {user.role !== "FINANCE" && <AssignmentPanel app={app} admin={user.role === "ADMIN"} />}
         <section className="card p-6">
           <h2 className="text-xl">History</h2>
           <ol className="mt-3 space-y-2 text-sm">

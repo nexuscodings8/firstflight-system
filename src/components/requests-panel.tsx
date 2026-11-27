@@ -1,27 +1,31 @@
 // Refunds and change requests on one application: the client's view (ask, fill in the refund form)
 // and the staff view (decide changes; refunds are decided on the Finance → Refunds page).
 import Link from "next/link";
-import { requestAmendment, requestRefund, submitRefundForm } from "@/app/portal/request-actions";
+import { requestAmendment } from "@/app/portal/request-actions";
 import { decideAmendment } from "@/app/staff/finance/refund-actions";
 import type { FullApplication } from "@/lib/applications";
-import { balanceOf, fromCents } from "@/lib/finance";
 import { date, money } from "@/lib/format";
-import { AMENDMENT_KINDS, AMENDMENT_STATUS, REFUND_STATUS } from "@/lib/requests";
+import { AMENDMENT_KINDS, AMENDMENT_STATUS } from "@/lib/requests";
+import { KIND_LABEL, OPEN_STATES, STATE_BADGE } from "@/lib/refunds";
+import type { RefundInfo } from "@/lib/refund-info";
+import { RefundTrack } from "./refund-track";
+import { RefundForm } from "./refund-form";
 import { ActionForm } from "./action-form";
 
 const Badge = ({ map, k }: { map: Record<string, [string, string]>; k: string }) => <span className={`badge ${map[k][1]}`}>{map[k][0]}</span>;
 
-export function RequestsPanel({ app, mode, canDecide = false, seeRefunds = false }: { app: FullApplication; mode: "client" | "staff"; canDecide?: boolean; seeRefunds?: boolean }) {
-  const paidInvoices = app.invoices.filter((i) => i.payments.length > 0);
+export function RequestsPanel({ app, mode, canDecide = false, seeRefunds = false, refund }: { app: FullApplication; mode: "client" | "staff"; canDecide?: boolean; seeRefunds?: boolean; refund?: RefundInfo }) {
+  const changes = app.amendments.filter((a) => a.source === "CLIENT");
+  const openRefund = app.refunds.find((r) => OPEN_STATES.includes(r.state));
   const showRefunds = mode === "client" || seeRefunds;
-  if (mode === "staff" && !app.amendments.length && !(seeRefunds && app.refunds.length)) return null;
+  if (mode === "staff" && !changes.length && !(seeRefunds && app.refunds.length)) return null;
   return (
     <section className="card p-6" aria-labelledby="rq-h">
       <h2 id="rq-h" className="text-xl">{mode === "client" ? "Refunds and changes" : "Change requests and refunds"}</h2>
 
-      {app.amendments.length > 0 && (
+      {changes.length > 0 && (
         <ul className="mt-3 divide-y divide-line">
-          {app.amendments.map((a) => (
+          {changes.map((a) => (
             <li key={a.id} className="py-3">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div><p className="font-semibold">{AMENDMENT_KINDS[a.kind as keyof typeof AMENDMENT_KINDS] ?? a.kind}</p><p className="text-sm muted">Asked {date(a.createdAt)}</p></div>
@@ -46,33 +50,16 @@ export function RequestsPanel({ app, mode, canDecide = false, seeRefunds = false
       )}
 
       {showRefunds && app.refunds.length > 0 && (
-        <ul className="mt-3 divide-y divide-line">
+        <ul className="mt-3 divide-y divide-line" aria-label="Refund and reapplication requests">
           {app.refunds.map((r) => (
-            <li key={r.id} className="py-3">
+            <li key={r.id} className="py-3" data-testid="refund-row">
               <div className="flex flex-wrap items-start justify-between gap-2">
-                <div><p className="font-semibold">Refund {r.reference}{r.invoice ? ` · ${r.invoice.number}` : ""}</p><p className="text-sm muted">Asked {date(r.createdAt)}{r.amountRequested ? ` · ${money(r.amountRequested, r.currency ?? "USD")} requested` : ""}{r.paidAmount ? ` · ${money(r.paidAmount, r.currency ?? "USD")} paid ${date(r.paidAt)}` : ""}</p></div>
-                <Badge map={REFUND_STATUS} k={r.status} />
+                <div><p className="font-semibold">{KIND_LABEL[r.kind]} {r.reference}{r.invoice ? ` · ${r.invoice.number}` : ""}</p><p className="text-sm muted">Submitted {date(r.createdAt)}{r.source === "PAPER" ? " (paper form)" : ""}{r.amountRequested ? ` · ${money(r.amountRequested, r.currency ?? "USD")} asked` : ""}{r.paidAmount ? ` · ${money(r.paidAmount, r.currency ?? "USD")} paid ${date(r.paidAt)}` : ""}</p></div>
+                <span className={`badge ${STATE_BADGE[r.state]?.[1] ?? "bg-mist"}`}>{STATE_BADGE[r.state]?.[0] ?? r.state}</span>
               </div>
-              {r.decisionNote && <p className="mt-1 rounded-lg bg-mist px-3 py-2 text-sm"><span className="font-semibold">Finance:</span> {r.decisionNote}</p>}
-              {mode === "staff" && <Link href="/staff/finance/refunds" className="mt-1 inline-block text-sm font-semibold text-brand underline">Open in Refunds</Link>}
-              {mode === "client" && r.status === "FORM_OPEN" && (() => {
-                const inv = app.invoices.find((i) => i.id === r.invoiceId);
-                const paid = inv ? balanceOf({ ...inv, status: "ISSUED" }).paid : 0;
-                return (
-                  <div className="mt-3 rounded-xl border-2 border-brand/30 p-4">
-                    <h3 className="text-base">Refund form</h3>
-                    <p className="text-sm muted">Your request was approved. Tell us how much and where to send it.</p>
-                    <ActionForm action={submitRefundForm} submit="Send refund form" className="mt-3 grid gap-3 sm:grid-cols-2">
-                      <input type="hidden" name="refundId" value={r.id} />
-                      <div><label className="label" htmlFor={`ra-${r.id}`}>Amount ({r.currency}; up to {fromCents(paid)})</label><input id={`ra-${r.id}`} name="amount" inputMode="decimal" defaultValue={fromCents(paid)} className="input" required /></div>
-                      <div><label className="label" htmlFor={`rm-${r.id}`}>Pay me by</label><select id={`rm-${r.id}`} name="method" className="input" defaultValue="MOBILE_MONEY"><option value="MOBILE_MONEY">Mobile money</option><option value="BANK_TRANSFER">Bank transfer</option></select></div>
-                      <div><label className="label" htmlFor={`rn-${r.id}`}>Name on the account</label><input id={`rn-${r.id}`} name="accountName" className="input" required maxLength={120} autoComplete="name" /></div>
-                      <div><label className="label" htmlFor={`rd-${r.id}`}>Mobile money number, or bank and account number</label><input id={`rd-${r.id}`} name="accountDetails" className="input" required maxLength={300} /></div>
-                      <label className="flex items-start gap-2 text-sm sm:col-span-2"><input type="checkbox" name="declaration" className="mt-1 size-4 accent-brand" /> I confirm these details are correct and the account is mine.</label>
-                    </ActionForm>
-                  </div>
-                );
-              })()}
+              <RefundTrack r={r} />
+              {r.adminNote && <p className="mt-2 rounded-lg bg-mist px-3 py-2 text-sm"><span className="font-semibold">Decision:</span> {r.adminNote}</p>}
+              {mode === "staff" && <Link href="/staff/refunds" className="mt-1 inline-block text-sm font-semibold text-brand underline">Open in Refunds</Link>}
             </li>
           ))}
         </ul>
@@ -90,15 +77,13 @@ export function RequestsPanel({ app, mode, canDecide = false, seeRefunds = false
               </ActionForm>
             </details>
           )}
-          {paidInvoices.length > 0 && (
-            <details className="rounded-xl bg-mist p-4">
-              <summary className="cursor-pointer font-semibold text-brand">Request a refund</summary>
-              <p className="mt-2 text-sm muted">Finance reviews every request. If it&apos;s approved, you&apos;ll fill in a short form with how to pay you.</p>
-              <ActionForm action={requestRefund} submit="Send refund request" className="mt-3 grid gap-3">
-                <input type="hidden" name="applicationId" value={app.id} />
-                <div><label className="label" htmlFor="rf-inv">Payment to refund</label><select id="rf-inv" name="invoiceId" className="input">{paidInvoices.map((i) => <option key={i.id} value={i.id}>{i.number}: {i.description} ({money(fromCents(balanceOf({ ...i, status: "ISSUED" }).paid), i.currency)} paid)</option>)}</select></div>
-                <div><label className="label" htmlFor="rf-reason">Why are you asking for a refund?</label><textarea id="rf-reason" name="reason" rows={3} className="input" required maxLength={2000} /></div>
-              </ActionForm>
+          {refund && (
+            <details className="rounded-xl bg-mist p-4 lg:col-span-2" id="refund-form">
+              <summary className="cursor-pointer font-semibold text-brand">Request a refund or reapply</summary>
+              <p className="mt-2 text-sm" data-testid="refund-eligibility">{refund.elig.text}</p>
+              <p className="mt-1 text-sm muted">{refund.terms} <a className="font-semibold text-brand underline" href="/forms/refund">Download the paper form (PDF)</a></p>
+              {openRefund ? <p className="mt-3 text-sm font-semibold">Request {openRefund.reference} is in progress. You can send another one when it&apos;s finished.</p>
+                : (refund.refundOpen || refund.allowReapplication) ? <div className="mt-3"><RefundForm applicationId={app.id} invoices={app.invoices} allowReapplication={refund.allowReapplication} refundOpen={refund.refundOpen} mode="client" clientName={app.client.name} /></div> : null}
             </details>
           )}
         </div>

@@ -16,15 +16,16 @@ export function nextStep(app: A, who: "client" | "staff"): string | undefined {
     if (missing) return `Waiting for the client to upload ${missing} required document${missing === 1 ? "" : "s"}.`;
     if (app.stage === "SUBMITTED") return "Assign a consultant and start the eligibility review.";
     if (app.stage === "ELIGIBILITY_REVIEW") return "Decide eligibility and move the application on, or close it with a message to the client.";
+    if (app.stage === "DOCUMENT_SIGNING") return "Waiting for the client to sign the contract online, or upload the paper copy they signed.";
     if (unpaid) return `Waiting for payment: ${unpaid.description}.`;
     return "Move the application to its next stage when this one is done.";
   }
   if (missing) return `Upload ${missing} required document${missing === 1 ? "" : "s"}.`;
   if (app.stage === "SUBMITTED") return "A consultant is being assigned and will review your eligibility.";
   if (app.stage === "ELIGIBILITY_REVIEW") return "Your consultant is reviewing your eligibility. We'll tell you here as soon as it's done.";
+  if (app.stage === "DOCUMENT_SIGNING") return "Sign your service contract online below, or sign a paper copy at the FIRST FLIGHT office.";
   if (unpaid) return `Pay ${unpaid.description}${unpaid.dueDate ? ` by ${unpaid.dueDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}` : ""}, then keep your receipt.`;
   if (app.stage === "INITIAL_PAYMENT") return "Finance will send your invoice for the first instalment.";
-  if (app.stage === "DOCUMENT_SIGNING") return "Visit the FIRST FLIGHT office to sign your working documents.";
   if (app.stage === "PROCESSING") return "Your file is being processed. We'll post every update here.";
   if (app.stage === "FINAL_COLLECTION") return "Your final documents are ready to collect at the FIRST FLIGHT office.";
   return undefined;

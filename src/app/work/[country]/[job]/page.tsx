@@ -7,6 +7,8 @@ import { Breadcrumbs } from "@/components/breadcrumbs";
 import { AvailabilityBadge, canApply } from "@/components/badges";
 import { Checklist } from "@/components/checklist";
 import { Icon } from "@/components/icons";
+import { PublicFee } from "@/components/public-fee";
+import { publicFee } from "@/lib/public-fee";
 import { date, label, salaryText } from "@/lib/format";
 
 type P = { params: Promise<{ country: string; job: string }>; searchParams: Promise<Record<string, string | undefined>> };
@@ -23,6 +25,7 @@ export default async function JobDetail({ params, searchParams }: P) {
   const j = await getJob(country, job, preview);
   if (!j) notFound();
   const open = canApply(j.availability);
+  const fee = await publicFee({ service: "WORK", jobId: j.id, countryId: j.countryId });
   const facts: [string, string, string][] = [
     ["pin", "Location", `${j.location}, ${j.country.name}`],
     ["money", "Salary", salaryText(j.salaryMin, j.salaryMax, j.salaryCurrency, j.salaryPeriod)],
@@ -52,6 +55,7 @@ export default async function JobDetail({ params, searchParams }: P) {
           <div className="card p-6">
             <h2 className="text-xl">Required documents</h2>
             <Checklist items={j.requirements} />
+            <PublicFee fee={fee} />
             {open ? (
               <Link href={`/apply?job=${j.id}`} className="btn-gold mt-5 w-full">Apply for this job</Link>
             ) : (

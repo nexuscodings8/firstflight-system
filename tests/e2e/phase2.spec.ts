@@ -58,7 +58,8 @@ test.describe.serial("phase 2: staff workflows", () => {
     await item(k.page, "Passport copy").getByRole("button", { name: "Verify Passport copy" }).click();
     await expect(item(k.page, "Passport copy").getByText("Verified", { exact: true })).toBeVisible();
     await c.page.reload();
-    await expect(item(c.page, "Passport copy").getByText("Verified")).toBeVisible();
+    await expect(item(c.page, "Passport copy").getByText("Verified", { exact: true })).toBeVisible();
+    await expect(item(c.page, "Passport copy").getByText(/Verified by Sandrine Umutoni/)).toBeVisible();
     await k.close(); await c.close();
   });
 
@@ -79,7 +80,7 @@ test.describe.serial("phase 2: staff workflows", () => {
     await k.page.getByRole("button", { name: "Post", exact: true }).click();
     await expect(k.page.getByRole("status").filter({ hasText: "Internal note saved." })).toBeVisible();
 
-    await k.page.getByLabel("Stage").selectOption({ label: "Initial payment" });
+    await k.page.getByLabel("Stage", { exact: true }).selectOption({ label: "Initial payment" });
     await k.page.getByRole("button", { name: "Save progress" }).click();
     await expect(k.page.getByRole("status").filter({ hasText: "Application moved to Initial payment." })).toBeVisible();
 
@@ -106,7 +107,7 @@ test.describe.serial("phase 2: staff workflows", () => {
       await f.page.getByText(/Record a payment on INV-/).first().click();
       await f.page.getByLabel("Amount (USD)").fill(amount);
       await f.page.getByLabel("Method").selectOption({ label: "Mobile money" });
-      await f.page.getByLabel("Payment reference").fill(ref);
+      await f.page.getByLabel("Payment reference", { exact: true }).fill(ref);
       await f.page.getByLabel("Date paid").fill(new Date().toISOString().slice(0, 10));
       await f.page.getByRole("button", { name: "Record payment and issue receipt" }).click();
     };

@@ -19,7 +19,7 @@ export async function refundsForMonth(ym: string) {
   const r = monthRange(ym);
   if (!r) return null;
   return db.query.refundRequests.findMany({
-    where: and(eq(s.refundRequests.status, "PAID"), gte(s.refundRequests.paidAt, r[0]), lt(s.refundRequests.paidAt, r[1])),
+    where: and(eq(s.refundRequests.state, "COMPLETED"), eq(s.refundRequests.kind, "REFUND"), gte(s.refundRequests.paidAt, r[0]), lt(s.refundRequests.paidAt, r[1])),
     orderBy: [asc(s.refundRequests.paidAt)],
     with: { client: { columns: { name: true } }, application: { columns: { reference: true } } },
   });

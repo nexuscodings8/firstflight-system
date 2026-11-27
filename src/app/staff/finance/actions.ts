@@ -1,12 +1,13 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db, schema as s } from "@/db";
 import { requireUser } from "@/lib/auth";
 import { logActivity, notify } from "@/lib/activity";
 import { emailUser } from "@/lib/email";
 import { nextRef } from "@/lib/refs";
-import { CURRENCIES, PAYMENT_METHOD_LABEL, balanceOf, fromCents, normaliseRef, parseAmount, statusAfterPayments } from "@/lib/finance";
+import { approvePaymentTx, paymentError } from "@/lib/payments";
+import { CURRENCIES, balanceOf, fromCents, normaliseRef, parseAmount } from "@/lib/finance";
 import { money } from "@/lib/format";
 
 export type FinState = { ok?: string; error?: string } | undefined;
@@ -64,28 +65,15 @@ export async function recordPayment(_: FinState, fd: FormData): Promise<FinState
   if (cents > due) return { error: `That is more than the balance of ${money(fromCents(due), inv.currency)}.` };
   const dupe = await db.query.payments.findFirst({ where: eq(s.payments.reference, reference), with: { invoice: { columns: { number: true } } } });
   if (dupe) return { error: `Reference ${reference} was already recorded on ${dupe.invoice.number} (receipt ${dupe.receiptNumber}). Check you are not entering the same payment twice.` };
+  const loanFunded = fd.get("loanFunded") === "on";
+  const loanProvider = str(fd, "loanProvider", 120);
+  if (loanFunded && loanProvider.length < 2) return { error: "Name the loan provider or arrangement." };
   let pay;
   try {
-    pay = await db.transaction(async (tx) => {
-      // Lock the invoice so two people recording at once can't overpay it.
-      await tx.execute(sql`select id from invoices where id = ${inv.id} for update`);
-      const already = await tx.select({ amount: s.payments.amount }).from(s.payments).where(eq(s.payments.invoiceId, inv.id));
-      const before = already.reduce((n, p) => n + Math.round(Number(p.amount) * 100), 0);
-      if (before + cents > Math.round(Number(inv.amount) * 100)) throw Object.assign(new Error("overpay"), { code: "OVERPAY" });
-      const receiptNumber = await nextRef(tx, "RC");
-      const [row] = await tx.insert(s.payments).values({ invoiceId: inv.id, amount: fromCents(cents), method, reference, receiptNumber, paidAt, note: note || null, recordedById: user.id }).returning();
-      const paid = before + cents;
-      const status = statusAfterPayments(inv.status, Math.round(Number(inv.amount) * 100), paid);
-      await tx.update(s.invoices).set({ status }).where(eq(s.invoices.id, inv.id));
-      await logActivity(tx, { actorId: user.id, action: "payment.recorded", entityType: "payment", entityId: row.id, applicationId: inv.applicationId,
-        summary: `${user.name} recorded ${money(row.amount, inv.currency)} (${PAYMENT_METHOD_LABEL[method]}, ${reference}) on ${inv.number}; receipt ${receiptNumber}`, changes: { invoiceStatus: [inv.status, status] } });
-      await notify(tx, { userId: inv.application.clientId, title: "Payment received", body: `${money(row.amount, inv.currency)} for ${inv.number}. Receipt ${receiptNumber}.`, link: `/billing/receipts/${row.id}` });
-      if (inv.application.consultantId) await notify(tx, { userId: inv.application.consultantId, title: "Client payment received", body: `${inv.application.reference}: ${inv.number} is now ${status === "PAID" ? "paid in full" : "partly paid"}.`, link: `/staff/applications/${inv.applicationId}` });
-      return row;
-    });
+    pay = (await db.transaction((tx) => approvePaymentTx(tx, { invoiceId: inv.id, cents, method, reference, paidAt, note, loanFunded, loanProvider, actor: user }))).payment;
   } catch (e) {
-    if ((e as { code?: string }).code === "OVERPAY") return { error: "Another payment was just recorded on this invoice. Reload the page and check the balance." };
-    if ((e as { code?: string }).code === "23505") return { error: `Reference ${reference} has already been recorded.` };
+    const msg = paymentError(e, reference);
+    if (msg) return { error: msg };
     throw e;
   }
   await emailUser(inv.application.clientId, `Receipt ${pay.receiptNumber} from FIRST FLIGHT`, `We received your payment of ${money(pay.amount, inv.currency)} for invoice ${inv.number} (${inv.description}). Thank you.\n\nReceipt number: ${pay.receiptNumber}`, `/billing/receipts/${pay.id}`);

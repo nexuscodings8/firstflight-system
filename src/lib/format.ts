@@ -34,4 +34,8 @@ export const STAGE_LABEL: Record<string, string> = {
   SUBMITTED: "Submitted", ELIGIBILITY_REVIEW: "Eligibility review", INITIAL_PAYMENT: "Initial payment",
   DOCUMENT_SIGNING: "Document signing", PROCESSING: "Processing", FINAL_COLLECTION: "Final collection", COMPLETED: "Completed",
 };
-export const SERVICE_LABEL = { WORK: "Work Abroad", STUDY: "Study Abroad", VISA: "Visa Processing" } as const;
+export const SERVICE_LABEL: Record<string, string> = { WORK: "Work Abroad", STUDY: "Study Abroad", VISA: "Visa Processing", FLIGHT: "Flights" };
+
+/** Appointment times are agreed in Kigali time, whatever the server's time zone. */
+export const kigaliTime = (d: Date | string) =>
+  new Date(d).toLocaleString("en-GB", { timeZone: "Africa/Kigali", weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) + " (Kigali time)";

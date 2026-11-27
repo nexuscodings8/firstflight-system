@@ -18,7 +18,9 @@ async function main() {
   await db.execute(sql`truncate table activities, notifications, payments, invoices, application_updates, documents,
     checklist_items, applications, enquiries, requirement_items, visa_guidance, visa_categories, programs, universities,
     jobs, job_categories, countries, continents, promotions, portfolio_entries, testimonials, news_posts, whatsapp_contacts,
-    counters, email_log, refund_requests, amendment_requests, fee_rules, sessions, users restart identity cascade`);
+    counters, email_log, refund_requests, amendment_requests, fee_rules, sessions, consultant_services, assignment_requests,
+    assignment_history, account_tokens, settings, contract_templates, contracts, appointments, payment_submissions,
+    messages, conversation_members, conversations, users restart identity cascade`);
 
   // ---------- people ----------
   const hash = await bcrypt.hash(pw, 12);
@@ -181,6 +183,12 @@ async function main() {
     { name: "FIRST FLIGHT office", department: "Visa processing", number: "250787720747", sortOrder: 3 },
   ]);
 
+  // ---------- which services each demo consultant handles ----------
+  await db.insert(s.consultantServices).values([
+    ...(["WORK", "STUDY", "VISA", "FLIGHT"] as const).map((service) => ({ userId: consultant.id, service, grantedById: admin.id })),
+    ...(["STUDY", "VISA", "FLIGHT"] as const).map((service) => ({ userId: consultant2.id, service, grantedById: admin.id })),
+  ]);
+
   // ---------- sample service fees (private; Finance applies them to applications) ----------
   await db.insert(s.feeRules).values([
     { name: "Work placement (general)", service: "WORK" as const, amount: "1200.00", currency: "USD", installments: [{ label: "Deposit", percent: 40, dueDays: 0 }, { label: "Second instalment", percent: 30, dueDays: 30 }, { label: "Final balance", percent: 30, dueDays: 60 }], createdById: finance.id },
@@ -204,6 +212,7 @@ async function main() {
       { actorId: client.id, action: "application.submitted", entityType: "application", entityId: app.id, applicationId: app.id, summary: `${client.name} submitted ${app.reference}: ${demoJob.title}`, createdAt: days(-6) },
       { actorId: admin.id, action: "application.assigned", entityType: "application", entityId: app.id, applicationId: app.id, summary: `${admin.name} assigned ${app.reference} to ${consultant.name}`, createdAt: days(-6) },
     ]);
+    await db.insert(s.assignmentHistory).values({ applicationId: app.id, toConsultantId: consultant.id, changedById: admin.id, kind: "ASSIGNED", reason: "Demo assignment", createdAt: days(-6) });
     await db.insert(s.notifications).values({ userId: client.id, title: "Your consultant is assigned", body: `${consultant.name} is now handling ${app.reference}.`, link: `/portal/applications/${app.id}`, createdAt: days(-6) });
   }
 

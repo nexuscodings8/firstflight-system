@@ -5,7 +5,10 @@ import { logout } from "@/app/(auth)/actions";
 import { Icon } from "../icons";
 import { SideNav, type NavItem } from "./side-nav";
 
+import { FlashHost } from "../flash";
+
 /** Layout shared by the client portal and the staff dashboard: top bar, navy sidebar (tabs on phones), content. */
+
 export function AppShell({ subtitle, roleLabel, name, home, items, children }: { subtitle: string; roleLabel: string; name: string; home: string; items: NavItem[]; children: React.ReactNode }) {
   const initials = name.split(/\s+/).slice(0, 2).map((w) => w[0] ?? "").join("").toUpperCase();
   return (
@@ -27,6 +30,7 @@ export function AppShell({ subtitle, roleLabel, name, home, items, children }: {
       <div className="lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
         <Suspense fallback={<div className="bg-[#0d2a66] lg:min-h-screen" />}><SideNav items={items} name={name} roleLabel={roleLabel} /></Suspense>
         <div id="content" className="min-w-0 px-4 pb-14 pt-6 sm:px-[max(2rem,3vw)]">{children}</div>
+        <FlashHost />
       </div>
     </div>
   );

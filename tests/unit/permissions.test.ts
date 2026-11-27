@@ -56,3 +56,17 @@ describe("phase 2 rules", () => {
     expect(canViewInvoice({ id: "k1", role: "CONSULTANT" }, app)).toBe(false);
   });
 });
+
+describe("service permissions", () => {
+  it("a consultant loses case access as soon as the service is revoked", async () => {
+    const { canWorkOnCase, canViewApplication, canViewDocuments } = await import("@/lib/permissions");
+    const visa = { ...app, service: "VISA" };
+    const k = { id: "k1", role: "CONSULTANT" as const, services: ["WORK", "VISA"] };
+    expect(canWorkOnCase(k, visa)).toBe(true);
+    const revoked = { ...k, services: ["WORK"] };
+    expect(canWorkOnCase(revoked, visa)).toBe(false);
+    expect(canViewApplication(revoked, visa)).toBe(false);
+    expect(canViewDocuments(revoked, visa)).toBe(false);
+    expect(canWorkOnCase({ id: "a", role: "ADMIN" }, visa)).toBe(true);
+  });
+});

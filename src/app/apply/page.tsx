@@ -7,6 +7,7 @@ import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Checklist } from "@/components/checklist";
 import { ApplyForm } from "@/components/apply-form";
 import { SERVICE_LABEL } from "@/lib/format";
+import { activeApplication } from "@/lib/create-application";
 
 export const metadata: Metadata = { title: "Apply" };
 
@@ -19,6 +20,7 @@ export default async function ApplyPage({ searchParams }: { searchParams: Promis
   if (user.role !== "CLIENT") redirect("/forbidden");
   const sel = await resolveSelection(q);
   if (!sel) notFound();
+  const open = await activeApplication(user.id);
   return (
     <div className="wrap max-w-5xl">
       <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: sel.service === "WORK" ? "/work" : sel.service === "STUDY" ? "/study" : "/visa", label: SERVICE_LABEL[sel.service] }, { label: "Apply" }]} />
@@ -34,7 +36,13 @@ export default async function ApplyPage({ searchParams }: { searchParams: Promis
         <section className="card p-6">
           <h2 className="text-xl">Submit your application</h2>
           <p className="mt-1 text-sm muted">Applying as <strong>{user.name}</strong> ({user.email}).</p>
-          <div className="mt-5">{sel.open ? <ApplyForm hidden={keep} /> : <p className="rounded-xl bg-mist p-4">This listing is not accepting applications right now. <Link className="text-brand underline" href="/contact">Speak to a consultant</Link>.</p>}</div>
+          <div className="mt-5">{open ? (
+            <div role="status" className="rounded-xl border border-gold bg-gold/15 p-4">
+              <p className="font-semibold">You already have an application in progress ({open.reference}).</p>
+              <p className="mt-1 text-sm">You can have one active application at a time. You can apply again once it is completed or closed.</p>
+              <Link href={`/portal/applications/${open.id}`} className="btn-primary btn-sm mt-3">Open my application</Link>
+            </div>
+          ) : sel.open ? <ApplyForm hidden={keep} /> : <p className="rounded-xl bg-mist p-4">This listing is not accepting applications right now. <Link className="text-brand underline" href="/contact">Speak to a consultant</Link>.</p>}</div>
         </section>
       </div>
     </div>

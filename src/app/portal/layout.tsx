@@ -3,6 +3,7 @@ import { and, count, eq, inArray, isNull } from "drizzle-orm";
 import { db, schema as s } from "@/db";
 import { requireUser } from "@/lib/auth";
 import { AppShell } from "@/components/shell/app-shell";
+import { OPEN_STATES } from "@/lib/refunds";
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser(undefined, "/portal");
@@ -12,7 +13,7 @@ export default async function PortalLayout({ children }: { children: React.React
     n(db.select({ n: count() }).from(s.notifications).where(and(eq(s.notifications.userId, user.id), isNull(s.notifications.readAt)))),
     n(db.select({ n: count() }).from(s.checklistItems).innerJoin(s.applications, eq(s.applications.id, s.checklistItems.applicationId))
       .where(and(eq(s.applications.clientId, user.id), eq(s.applications.status, "ACTIVE"), eq(s.checklistItems.mandatory, true), inArray(s.checklistItems.state, ["PENDING", "REQUESTED", "REJECTED"])))),
-    n(db.select({ n: count() }).from(s.refundRequests).where(and(eq(s.refundRequests.clientId, user.id), eq(s.refundRequests.status, "FORM_OPEN")))),
+    n(db.select({ n: count() }).from(s.refundRequests).where(and(eq(s.refundRequests.clientId, user.id), inArray(s.refundRequests.state, OPEN_STATES)))),
   ]);
   return (
     <AppShell subtitle="Client portal" roleLabel="Client" name={user.name} home="/portal" items={[
