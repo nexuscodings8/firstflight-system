@@ -31,10 +31,10 @@ export async function loadViewable(user: CurrentUser, kind: string, id: string):
     const review = c && isLatest && user.role !== "CLIENT" && canWorkOnCase(user, d.application) && (c.state === "UPLOADED" || c.state === "REJECTED") ? { applicationId: d.application.id, itemId: c.id, label: c.label } : undefined;
     return { title: c?.label ?? d.fileName, fileName: d.fileName, mime: d.mimeType, src: `/api/documents/${d.id}?inline=1`, download: `/api/documents/${d.id}`, back: appBack(d.application.id, d.application.reference), meta, review };
   }
-  if (kind === "submission" || kind === "loan") {
+  if (kind === "submission" || kind === "loanproof") {
     const x = await db.query.paymentSubmissions.findFirst({ where: eq(s.paymentSubmissions.id, id), with: { application: appCols, invoice: { columns: { number: true, currency: true } } } });
     if (!x || !(user.role === "FINANCE" || user.role === "ADMIN" || (user.role === "CLIENT" && x.application.clientId === user.id))) return null;
-    const loan = kind === "loan";
+    const loan = kind === "loanproof";
     const key = loan ? x.loanDocKey : x.proofKey, fname = loan ? x.loanDocName : x.proofName;
     if (!key || !fname) return null;
     const q = loan ? "doc=loan&" : "";
@@ -47,6 +47,25 @@ export async function loadViewable(user: CurrentUser, kind: string, id: string):
     if (!c || !(canViewDocuments(user, c.application) || user.role === "FINANCE")) return null;
     return { title: c.title, fileName: c.fileName, mime: c.mimeType, src: `/api/files/contract/${c.id}?inline=1`, download: `/api/files/contract/${c.id}`, back: appBack(c.application.id, c.application.reference),
       meta: [["Application", c.application.reference], ["Signed", dateTime(c.signedAt)], ["Method", c.method === "ONLINE" ? `Online by ${c.signedName}` : "Paper copy, uploaded by staff"]] };
+  }
+  if (kind === "case") {
+    const f = await db.query.caseFiles.findFirst({ where: eq(s.caseFiles.id, id), with: { application: appCols, uploadedBy: { columns: { name: true } } } });
+    if (!f || !canViewApplication(user, f.application)) return null;
+    if (f.kind === "PAYMENT_EVIDENCE" && user.role !== "FINANCE" && user.role !== "ADMIN") return null;
+    // The client opening their offer letter or visa is recorded (the first time).
+    if (user.role === "CLIENT" && !f.clientViewedAt) await db.update(s.caseFiles).set({ clientViewedAt: new Date() }).where(eq(s.caseFiles.id, f.id));
+    const meta: [string, string][] = [["Application", f.application.reference], ["Uploaded", `${dateTime(f.createdAt)}${user.role === "CLIENT" ? "" : ` by ${f.uploadedBy.name}`}`]];
+    if (f.issuedOn) meta.push([f.kind === "VISA" ? "Visa issued" : "Dated", dateTime(f.issuedOn).split(",")[0]]);
+    if (f.historical) meta.push(["Source", "From before the platform"]);
+    if (f.note && user.role !== "CLIENT") meta.push(["Note", f.note]);
+    if (f.clientViewedAt && user.role !== "CLIENT") meta.push(["Client opened it", dateTime(f.clientViewedAt)]);
+    return { title: f.title, fileName: f.fileName, mime: f.mimeType, src: `/api/files/case/${f.id}?inline=1`, download: `/api/files/case/${f.id}`, back: appBack(f.application.id, f.application.reference), meta };
+  }
+  if (kind === "loan") {
+    const l = await db.query.loanRequests.findFirst({ where: eq(s.loanRequests.id, id), with: { application: appCols } });
+    if (!l?.docKey || !l.docName || !(user.role === "FINANCE" || user.role === "ADMIN" || (user.role === "CLIENT" && l.application.clientId === user.id))) return null;
+    return { title: `Loan document for ${l.reference}`, fileName: l.docName, mime: l.docMime ?? mimeOf(l.docName), src: `/api/files/loan/${l.id}?inline=1`, download: `/api/files/loan/${l.id}`,
+      back: user.role === "CLIENT" ? appBack(l.application.id, l.application.reference) : { href: "/staff/finance/loans", label: "Back to loan requests" }, meta: [["Application", l.application.reference], ["Provider", l.provider], ["Status", l.status.replace("_", " ").toLowerCase()]] };
   }
   if (kind === "refund") {
     const r = await db.query.refundRequests.findFirst({ where: eq(s.refundRequests.id, id), with: { application: appCols } });

@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { asc, desc, ne } from "drizzle-orm";
+import { asc, desc, eq, ne } from "drizzle-orm";
 import { db, schema as s } from "@/db";
 import { requireUser } from "@/lib/auth";
 import type { Installment } from "@/lib/fees";
-import { SERVICE_LABEL, money } from "@/lib/format";
+import { SERVICE_LABEL, dateTime, money } from "@/lib/format";
 import { ActionForm } from "@/components/action-form";
 import { FeeRuleForm, type FeeOptions } from "@/components/fee-rule-form";
 import { Empty } from "@/components/cards";
@@ -21,13 +21,19 @@ export default async function FeesPage() {
     db.select({ id: s.programs.id, label: s.programs.name }).from(s.programs).where(ne(s.programs.status, "ARCHIVED")).orderBy(asc(s.programs.name)),
     db.select({ id: s.visaCategories.id, label: s.visaCategories.name }).from(s.visaCategories).orderBy(asc(s.visaCategories.sortOrder)),
   ]);
+  const history = await db.query.activities.findMany({ where: eq(s.activities.entityType, "fee_rule"), orderBy: [desc(s.activities.createdAt)], limit: 30 });
   const options: FeeOptions = { countries, jobs, universities: unis, programs, visaCategories: cats };
   const name = (list: { id: string; label: string }[], id: string | null) => list.find((x) => x.id === id)?.label;
   return (
     <div className="grid gap-6">
       <Link href="/staff/finance" className="text-sm font-semibold text-brand">← Finance</Link>
-      <div><h1 className="text-[clamp(26px,3vw,36px)]">Service fees</h1><p className="mt-1 max-w-2xl muted">Fees are private: visitors never see them. Clients see only the fee plan applied to their own application. Changing a fee here never changes a plan already applied, and every change is recorded in the activity history.</p></div>
+      <div><h1 className="text-[clamp(26px,3vw,36px)]">Service fees</h1><p className="mt-1 max-w-2xl muted">Visitors see only the total fee on a listing, never the instalments. Each fee here is a template: the price is locked into an application when the client applies, and Finance confirms that client&apos;s own instalment schedule at initial invoicing. Changing a fee never changes an application&apos;s agreed price. Every change is recorded below.</p></div>
       <section className="card p-5"><h2 className="mb-3 text-xl">New fee</h2><FeeRuleForm options={options} /></section>
+      <section className="card p-5" aria-labelledby="ph-h">
+        <h2 id="ph-h" className="text-xl">Price history</h2>
+        <ol className="mt-2 divide-y divide-line text-sm">{history.map((h) => <li key={h.id} className="flex flex-wrap gap-x-4 py-2"><span className="w-40 shrink-0 muted">{dateTime(h.createdAt)}</span><span className="flex-1">{h.summary}</span></li>)}</ol>
+        {!history.length && <p className="text-sm muted">No price changes yet.</p>}
+      </section>
       <section className="grid gap-3">
         <h2 className="text-xl">Fees</h2>
         {rules.map((r) => {

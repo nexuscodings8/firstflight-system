@@ -1,14 +1,27 @@
 // Service fee rules and instalment plans: pure functions, unit-tested.
 
-export type Installment = { label: string; percent: number; dueDays: number };
+export type Installment = { label: string; percent: number; dueDays: number; condition?: Condition };
 export type Scope = { service: string; countryId?: string | null; jobId?: string | null; universityId?: string | null; programId?: string | null; visaCategoryId?: string | null };
 export type RuleLike = Scope & { id: string; active: boolean };
 
-/** Snapshot stored on the application when a plan is applied; later rule changes never alter it. */
+/**
+ * The agreed fee of one application. The price is locked when the client applies (appliedAt); Finance or Admin
+ * then confirms the instalment schedule (confirmedAt). An instalment is invoiced only when its condition is met,
+ * so invoiceId stays null until then. Plans made before stage-based invoicing have every invoice already issued
+ * and no condition (they count as "INITIAL").
+ */
+export type Condition = "INITIAL" | "OFFER_LETTER" | "VISA" | `STAGE:${string}`;
+export type PlanRow = {
+  label: string; amount: string; dueDate: string | null; invoiceId: string | null; invoiceNumber: string | null;
+  condition?: Condition; dueDays?: number; loanEligible?: boolean; historical?: boolean; activatedAt?: string | null;
+};
 export type FeePlan = {
   ruleId: string; ruleName: string; amount: string; currency: string; appliedAt: string; appliedBy: string;
-  installments: { label: string; amount: string; dueDate: string; invoiceId: string; invoiceNumber: string }[];
+  confirmedAt?: string | null; confirmedBy?: string | null; confirmedById?: string | null;
+  installments: PlanRow[];
 };
+/** Legacy plans (every invoice issued at once) count as confirmed. */
+export const planConfirmed = (p: FeePlan | null | undefined) => !!p && (p.confirmedAt !== undefined ? !!p.confirmedAt : p.installments.every((x) => !!x.invoiceId));
 
 /** 1 to 3 instalments, whole percentages adding up to exactly 100, sensible due days. */
 export function validateInstallments(list: Installment[]): string | null {

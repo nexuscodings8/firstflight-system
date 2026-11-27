@@ -19,14 +19,14 @@ export const studyLevel = pgEnum("study_level", ["FOUNDATION", "CERTIFICATE", "D
 export const billingPeriod = pgEnum("billing_period", ["YEAR", "SEMESTER", "TERM", "MONTH", "FULL_PROGRAM"]);
 export const reviewState = pgEnum("review_state", ["CURRENT", "NEEDS_REVIEW"]);
 export const serviceType = pgEnum("service_type", ["WORK", "STUDY", "VISA"]);
-export const stage = pgEnum("stage", ["SUBMITTED", "ELIGIBILITY_REVIEW", "INITIAL_PAYMENT", "DOCUMENT_SIGNING", "PROCESSING", "FINAL_COLLECTION", "COMPLETED"]);
+export const stage = pgEnum("stage", ["SUBMITTED", "ELIGIBILITY_REVIEW", "INITIAL_PAYMENT", "DOCUMENT_SIGNING", "PROCESSING", "GETTING_OFFER", "VISA_PROCESSING", "FINAL_COLLECTION", "COMPLETED"]);
 export const applicationStatus = pgEnum("application_status", ["ACTIVE", "COMPLETED", "NOT_ELIGIBLE", "UNSUCCESSFUL", "WITHDRAWN"]);
 export const checklistState = pgEnum("checklist_state", ["PENDING", "REQUESTED", "UPLOADED", "VERIFIED", "REJECTED"]);
 export const updateVisibility = pgEnum("update_visibility", ["CLIENT", "INTERNAL"]);
 export const enquiryType = pgEnum("enquiry_type", ["PROGRAM_GUIDANCE", "VISA_CONSULTATION", "JOB_QUESTION", "GENERAL", "CHATBOT_HANDOFF", "FLIGHT_BOOKING"]);
 export const enquiryStatus = pgEnum("enquiry_status", ["NEW", "IN_PROGRESS", "CLOSED"]);
 export const invoiceStatus = pgEnum("invoice_status", ["DRAFT", "ISSUED", "PARTIALLY_PAID", "PAID", "VOID"]);
-export const paymentMethod = pgEnum("payment_method", ["CASH", "BANK_TRANSFER", "MOBILE_MONEY", "CARD"]);
+export const paymentMethod = pgEnum("payment_method", ["CASH", "BANK_TRANSFER", "MOBILE_MONEY", "CARD", "LOAN"]);
 
 // ---------- people and access ----------
 export const users = pgTable("users", {
@@ -194,6 +194,10 @@ export const applications = pgTable("applications", {
   feePlan: jsonb("fee_plan"), // agreed service fee and instalments, copied from the fee rule when applied (never changes afterwards)
   feePlanHistory: jsonb("fee_plan_history"), // earlier agreed plans, kept when an approved amendment changes the fee
   previousApplicationId: text("previous_application_id"), // set when this is an approved reapplication
+  origin: text("origin").notNull().default("ONLINE"), // ONLINE | STAFF | EXISTING (a client served manually before the platform)
+  originalStartDate: timestamp("original_start_date", { withTimezone: true }), // existing clients: when the service really began
+  importedStageReachedAt: timestamp("imported_stage_reached_at", { withTimezone: true }), // existing clients: when they reached the recorded stage
+  importNote: text("import_note"),
   stage: stage("stage").notNull().default("SUBMITTED"),
   status: applicationStatus("status").notNull().default("ACTIVE"),
   createdAt: created(),
@@ -279,6 +283,7 @@ export const payments = pgTable("payments", {
   loanFunded: boolean("loan_funded").notNull().default(false),
   loanProvider: text("loan_provider"),
   receiptSentAt: timestamp("receipt_sent_at", { withTimezone: true }),
+  historical: boolean("historical").notNull().default(false), // paid before the platform, validated by Finance
   recordedById: text("recorded_by_id").notNull().references(() => users.id),
   createdAt: created(),
 }, (t) => [index("payments_invoice_idx").on(t.invoiceId)]);
@@ -516,6 +521,7 @@ export const conversationMembers = pgTable("conversation_members", {
   conversationId: text("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   lastReadAt: timestamp("last_read_at", { withTimezone: true }),
+  following: boolean("following").notNull().default(false), // notified of every new message (members of direct and group chats always are)
   createdAt: created(),
 }, (t) => [uniqueIndex("conversation_members_unique").on(t.conversationId, t.userId)]);
 
@@ -524,9 +530,71 @@ export const messages = pgTable("messages", {
   conversationId: text("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
   authorId: text("author_id").notNull().references(() => users.id),
   body: text("body").notNull(),
-  mentions: jsonb("mentions"), // user ids mentioned
+  mentions: jsonb("mentions"), // user ids mentioned or tagged as concerned
+  parentId: text("parent_id"), // reply to another message in the same conversation
   createdAt: created(),
 }, (t) => [index("messages_conversation_idx").on(t.conversationId, t.createdAt)]);
+
+// ---------- offer letters, visas and documents from before the platform ----------
+export const caseFiles = pgTable("case_files", {
+  id: id(),
+  applicationId: text("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(), // OFFER_LETTER | VISA | CONTRACT_SCAN | PAYMENT_EVIDENCE | OTHER
+  title: text("title").notNull(),
+  note: text("note"), // staff description / internal note
+  issuedOn: timestamp("issued_on", { withTimezone: true }), // date on the document (offer date, visa grant date)
+  historical: boolean("historical").notNull().default(false), // brought in when registering an existing client
+  storageKey: text("storage_key").notNull(),
+  fileName: text("file_name").notNull(),
+  mimeType: text("mime_type").notNull(),
+  uploadedById: text("uploaded_by_id").notNull().references(() => users.id),
+  clientViewedAt: timestamp("client_viewed_at", { withTimezone: true }),
+  createdAt: created(),
+}, (t) => [index("case_files_app_idx").on(t.applicationId, t.kind)]);
+
+// Payments made before the platform: recorded by staff, counted only once Finance validates them.
+export const historicalPayments = pgTable("historical_payments", {
+  id: id(),
+  applicationId: text("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  currency: text("currency").notNull(),
+  method: paymentMethod("method").notNull(),
+  reference: text("reference").notNull(),
+  paidAt: timestamp("paid_at", { withTimezone: true }).notNull(),
+  evidenceFileId: text("evidence_file_id").references(() => caseFiles.id),
+  status: text("status").notNull().default("PENDING"), // PENDING | VALIDATED | REJECTED
+  note: text("note"),
+  decisionNote: text("decision_note"),
+  createdById: text("created_by_id").notNull().references(() => users.id),
+  validatedById: text("validated_by_id").references(() => users.id),
+  validatedAt: timestamp("validated_at", { withTimezone: true }),
+  paymentId: text("payment_id").references(() => payments.id),
+  createdAt: created(),
+}, (t) => [index("historical_payments_app_idx").on(t.applicationId)]);
+
+// Loan-based payment of the third and final instalment (only for schedules with exactly three instalments).
+export const loanRequests = pgTable("loan_requests", {
+  id: id(),
+  reference: text("reference").notNull().unique(), // LN-2026-0001
+  applicationId: text("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  invoiceId: text("invoice_id").notNull().references(() => invoices.id),
+  installmentIndex: integer("installment_index").notNull(), // always 2 (the third instalment), checked on the server
+  clientId: text("client_id").notNull().references(() => users.id),
+  provider: text("provider").notNull(),
+  amountRequested: numeric("amount_requested", { precision: 12, scale: 2 }).notNull(),
+  details: text("details").notNull(),
+  docKey: text("doc_key"), docName: text("doc_name"), docMime: text("doc_mime"),
+  status: text("status").notNull().default("PENDING_REVIEW"), // PENDING_REVIEW | APPROVED | REJECTED
+  approvedAmount: numeric("approved_amount", { precision: 12, scale: 2 }),
+  approvedProvider: text("approved_provider"),
+  conditions: text("conditions"),
+  internalNote: text("internal_note"),
+  decisionNote: text("decision_note"),
+  decidedById: text("decided_by_id").references(() => users.id),
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
+  paymentId: text("payment_id").references(() => payments.id),
+  createdAt: created(),
+}, (t) => [index("loan_requests_app_idx").on(t.applicationId), index("loan_requests_status_idx").on(t.status)]);
 
 // ---------- activity and notifications ----------
 export const activities = pgTable("activities", {
@@ -671,6 +739,9 @@ export const applicationsRelations = relations(applications, ({ one, many }) => 
   appointments: many(appointments),
   assignmentRequests: many(assignmentRequests),
   paymentSubmissions: many(paymentSubmissions),
+  caseFiles: many(caseFiles),
+  historicalPayments: many(historicalPayments),
+  loanRequests: many(loanRequests),
 }));
 export const checklistItemsRelations = relations(checklistItems, ({ one, many }) => ({
   application: one(applications, { fields: [checklistItems.applicationId], references: [applications.id] }),
@@ -743,6 +814,20 @@ export const conversationsRelations = relations(conversations, ({ one, many }) =
 export const conversationMembersRelations = relations(conversationMembers, ({ one }) => ({
   conversation: one(conversations, { fields: [conversationMembers.conversationId], references: [conversations.id] }),
   user: one(users, { fields: [conversationMembers.userId], references: [users.id] }),
+}));
+export const caseFilesRelations = relations(caseFiles, ({ one }) => ({
+  application: one(applications, { fields: [caseFiles.applicationId], references: [applications.id] }),
+  uploadedBy: one(users, { fields: [caseFiles.uploadedById], references: [users.id] }),
+}));
+export const historicalPaymentsRelations = relations(historicalPayments, ({ one }) => ({
+  application: one(applications, { fields: [historicalPayments.applicationId], references: [applications.id] }),
+  evidence: one(caseFiles, { fields: [historicalPayments.evidenceFileId], references: [caseFiles.id] }),
+  createdBy: one(users, { fields: [historicalPayments.createdById], references: [users.id] }),
+}));
+export const loanRequestsRelations = relations(loanRequests, ({ one }) => ({
+  application: one(applications, { fields: [loanRequests.applicationId], references: [applications.id] }),
+  invoice: one(invoices, { fields: [loanRequests.invoiceId], references: [invoices.id] }),
+  client: one(users, { fields: [loanRequests.clientId], references: [users.id] }),
 }));
 export const messagesRelations = relations(messages, ({ one }) => ({
   conversation: one(conversations, { fields: [messages.conversationId], references: [conversations.id] }),

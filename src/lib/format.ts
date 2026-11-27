@@ -29,10 +29,13 @@ export const dateTime = (d: Date | string) =>
 
 export const label = (s: string) => s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, " ");
 
-export const STAGES = ["SUBMITTED", "ELIGIBILITY_REVIEW", "INITIAL_PAYMENT", "DOCUMENT_SIGNING", "PROCESSING", "FINAL_COLLECTION", "COMPLETED"] as const;
+// The application journey. Getting offer and Visa processing come straight after Processing.
+export const STAGES = ["SUBMITTED", "ELIGIBILITY_REVIEW", "INITIAL_PAYMENT", "DOCUMENT_SIGNING", "PROCESSING", "GETTING_OFFER", "VISA_PROCESSING", "FINAL_COLLECTION", "COMPLETED"] as const;
+export type Stage = (typeof STAGES)[number];
 export const STAGE_LABEL: Record<string, string> = {
-  SUBMITTED: "Submitted", ELIGIBILITY_REVIEW: "Eligibility review", INITIAL_PAYMENT: "Initial payment",
-  DOCUMENT_SIGNING: "Document signing", PROCESSING: "Processing", FINAL_COLLECTION: "Final collection", COMPLETED: "Completed",
+  SUBMITTED: "Submitted", ELIGIBILITY_REVIEW: "Eligibility review", INITIAL_PAYMENT: "Initial invoice and payment",
+  DOCUMENT_SIGNING: "Contract signing", PROCESSING: "Processing", GETTING_OFFER: "Getting offer", VISA_PROCESSING: "Visa processing",
+  FINAL_COLLECTION: "Final collection", COMPLETED: "Completed",
 };
 export const SERVICE_LABEL: Record<string, string> = { WORK: "Work Abroad", STUDY: "Study Abroad", VISA: "Visa Processing", FLIGHT: "Flights" };
 

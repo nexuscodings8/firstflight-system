@@ -41,13 +41,13 @@ export default async function Verify({ searchParams }: { searchParams: Promise<{
           </dl>
           <p className="mt-2 flex flex-wrap gap-3 text-sm">
             {x.proofKey ? <Link className="font-semibold text-brand underline" href={`/staff/viewer/submission/${x.id}`}>View proof of payment</Link> : <span className="muted">No proof attached (cash)</span>}
-            {x.loanDocKey && <Link className="font-semibold text-brand underline" href={`/staff/viewer/loan/${x.id}`}>View loan document</Link>}
+            {x.loanDocKey && <Link className="font-semibold text-brand underline" href={`/staff/viewer/loanproof/${x.id}`}>View loan document</Link>}
           </p>
           {x.status === "PENDING" ? (
             <div className="mt-3 grid gap-3 lg:grid-cols-2">
               <ActionForm action={reviewSubmission} submit="Approve payment" className="grid gap-2">
                 <input type="hidden" name="id" value={x.id} /><input type="hidden" name="decision" value="approve" />
-                {x.loanFunded && <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="loanValidated" className="size-4 accent-brand" /> I validated the loan arrangement with {x.loanProvider}</label>}
+                {x.loanFunded && <p className="text-sm font-semibold text-red-700">Submitted as loan-funded before loans moved to Loan requests: reject it and ask the client to request a loan on an eligible third instalment.</p>}
                 <label className="sr-only" htmlFor={`in-${x.id}`}>Internal note</label><input id={`in-${x.id}`} name="internalNote" className="input text-sm" placeholder="Internal note (Finance and Admin only)" />
               </ActionForm>
               <ActionForm action={reviewSubmission} submit="Reject payment" className="grid gap-2" buttonClass="btn-ghost btn-sm justify-self-start">

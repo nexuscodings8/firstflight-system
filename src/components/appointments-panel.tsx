@@ -3,7 +3,7 @@ import { closeAppointment, inviteToOffice, respondToAppointment } from "@/app/ap
 import type { FullApplication } from "@/lib/applications";
 import { APPT_STATUS, type OfficeSnap } from "@/lib/appointments";
 import type { Office } from "@/lib/settings";
-import { STAGES, STAGE_LABEL, kigaliTime } from "@/lib/format";
+import { SERVICE_LABEL, STAGES, STAGE_LABEL, kigaliTime } from "@/lib/format";
 import { ActionForm } from "./action-form";
 
 export function AppointmentsPanel({ app, mode, canWork = false, office }: { app: FullApplication; mode: "client" | "staff"; canWork?: boolean; office?: Office }) {
@@ -20,7 +20,8 @@ export function AppointmentsPanel({ app, mode, canWork = false, office }: { app:
           return (
             <li key={a.id} className="rounded-xl border border-line p-4" data-testid="appointment">
               <div className="flex flex-wrap items-start justify-between gap-2">
-                <div><p className="font-semibold">{kigaliTime(a.startsAt)}</p><p className="text-sm muted">With {a.consultant.name}</p></div>
+                <div><p className="font-semibold">{kigaliTime(a.startsAt)}</p><p className="text-sm muted">{app.client.name} · {app.reference} · {SERVICE_LABEL[app.service]} · now at {STAGE_LABEL[app.stage]}</p>
+                  <p className="text-sm muted">Consultant: {a.consultant.name}{a.consultant.phone ? ` · ${a.consultant.phone}` : ""}{a.consultant.email ? ` · ${a.consultant.email}` : ""}</p></div>
                 <span className={`badge ${cls}`}>{txt}</span>
               </div>
               <p className="mt-2 text-sm"><span className="font-semibold">Why:</span> {a.reason}</p>

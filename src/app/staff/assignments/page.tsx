@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { and, asc, count, desc, eq, inArray, isNull, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, type SQL } from "drizzle-orm";
 import { db, schema as s } from "@/db";
 import { requireUser } from "@/lib/auth";
 import { STAGES, STAGE_LABEL, SERVICE_LABEL, date, dateTime } from "@/lib/format";
@@ -8,12 +8,12 @@ import { Empty } from "@/components/cards";
 import { decideRequest, directAssign } from "../assignment-actions";
 
 export const metadata = { title: "Assignments" };
-const TABS = { requests: "Pending requests", unassigned: "Unassigned clients", workload: "Workload", history: "History" } as const;
+const TABS = { unassigned: "Available (unassigned)", assigned: "Assigned clients", workload: "Workload", history: "History", requests: "Old requests" } as const;
 
 export default async function Assignments({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   await requireUser(["ADMIN"], "/staff/assignments");
   const sp = await searchParams;
-  const tab = (sp.tab && sp.tab in TABS ? sp.tab : "requests") as keyof typeof TABS;
+  const tab = (sp.tab && sp.tab in TABS ? sp.tab : "unassigned") as keyof typeof TABS;
   const service = ["WORK", "STUDY", "VISA"].includes(sp.service ?? "") ? (sp.service as "WORK") : undefined;
   const stage = STAGES.includes(sp.stage as "SUBMITTED") ? (sp.stage as "SUBMITTED") : undefined;
   const consultantF = sp.consultant || undefined;
@@ -66,6 +66,14 @@ export default async function Assignments({ searchParams }: { searchParams: Prom
         </ActionForm>
       </article>
     )) : <Empty title="Every active client has a consultant" />;
+  } else if (tab === "assigned") {
+    const apps = await db.query.applications.findMany({ where: and(...appWhere, consultantF ? eq(s.applications.consultantId, consultantF) : isNotNull(s.applications.consultantId)), orderBy: [desc(s.applications.updatedAt)], limit: 300, with: { client: { columns: { name: true } }, consultant: { columns: { name: true } } } });
+    body = apps.length ? (
+      <div className="card overflow-x-auto p-2"><table className="w-full min-w-[640px] text-left text-sm">
+        <thead><tr className="border-b border-line text-xs muted"><th className="px-3 py-2">Application</th><th className="px-3">Client</th><th className="px-3">Service</th><th className="px-3">Stage</th><th className="px-3">Consultant</th><th className="px-3" /></tr></thead>
+        <tbody>{apps.map((a) => <tr key={a.id} className="border-b border-line last:border-0"><td className="px-3 py-2.5 font-semibold">{a.reference}</td><td className="px-3">{a.client.name}</td><td className="px-3">{SERVICE_LABEL[a.service]}</td><td className="px-3">{STAGE_LABEL[a.stage]}</td><td className="px-3">{a.consultant?.name}{a.consultantId && !holds(a.consultantId, a.service) ? <span className="badge ml-2 bg-red-50 text-red-700">No longer holds this service</span> : null}</td><td className="px-3 text-right"><Link className="text-brand underline" href={`/staff/applications/${a.id}#assignment`}>Reassign or remove</Link></td></tr>)}</tbody>
+      </table></div>
+    ) : <Empty title="No assigned clients match" />;
   } else if (tab === "workload") {
     const rows = await db.select({ id: s.applications.consultantId, n: count() }).from(s.applications).where(and(...appWhere)).groupBy(s.applications.consultantId);
     body = (
@@ -81,7 +89,7 @@ export default async function Assignments({ searchParams }: { searchParams: Prom
     body = (
       <ol className="card divide-y divide-line p-2 text-sm">{hist.filter((h) => !service || h.application.service === service).map((h) => (
         <li key={h.id} className="flex flex-wrap gap-x-4 px-3 py-2.5"><span className="w-40 shrink-0 muted">{dateTime(h.createdAt)}</span>
-          <span className="flex-1"><Link className="font-semibold text-brand underline" href={`/staff/applications/${h.application.id}`}>{h.application.reference}</Link>: {h.kind === "UNASSIGNED" ? `removed from ${h.from?.name}` : `${h.from ? `${h.from.name} → ` : ""}${h.to?.name}`}{h.kind === "REQUEST_APPROVED" ? " (request approved)" : ""}{h.reason ? ` · ${h.reason}` : ""}</span>
+          <span className="flex-1"><Link className="font-semibold text-brand underline" href={`/staff/applications/${h.application.id}`}>{h.application.reference}</Link>: {h.kind === "UNASSIGNED" ? `removed from ${h.from?.name}` : `${h.from ? `${h.from.name} → ` : ""}${h.to?.name}`}{h.kind === "REQUEST_APPROVED" ? " (request approved)" : h.kind === "SELF_ASSIGNED" ? " (self-assigned)" : ""}{h.reason ? ` · ${h.reason}` : ""}</span>
           <span className="muted">{h.changedBy?.name ?? "System"}</span></li>))}</ol>
     );
   }

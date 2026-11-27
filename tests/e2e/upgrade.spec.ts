@@ -13,7 +13,7 @@ async function as(browser: Browser, email: string, password = PW) {
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
   await page.goto("/login");
-  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Email", { exact: true }).fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL((u) => !u.pathname.startsWith("/login"));
@@ -42,11 +42,11 @@ test.describe.serial("client management upgrade", () => {
     const k = await as(browser, "consultant2@firstflight.test");
     await k.page.goto("/staff/clients/new");
     await k.page.getByLabel("Full name").fill(client.name);
-    await k.page.getByLabel("Email").fill(client.email);
+    await k.page.getByLabel("Email", { exact: true }).fill(client.email);
     await k.page.getByLabel("Phone (with country code)").fill(client.phone);
     await k.page.getByLabel("Open an application for (optional)").selectOption({ label: "MSc Data Science, University of Manitoba" });
     await k.page.getByRole("button", { name: "Create client account" }).click();
-    await ok(k.page, /request to serve them is waiting for an administrator/);
+    await ok(k.page, /It's assigned to you/);
     activation = (await k.page.getByTestId("activation-link").textContent())!.trim();
     expect(activation).toMatch(/\/activate\?token=/);
     // Only the link is shown: no password field and nothing that looks like a generated password.
@@ -56,7 +56,7 @@ test.describe.serial("client management upgrade", () => {
     // The same email can't be registered twice.
     await k.page.goto("/staff/clients/new");
     await k.page.getByLabel("Full name").fill(client.name);
-    await k.page.getByLabel("Email").fill(client.email);
+    await k.page.getByLabel("Email", { exact: true }).fill(client.email);
     await k.page.getByLabel("Phone (with country code)").fill("+250780000999");
     await k.page.getByRole("button", { name: "Create client account" }).click();
     await alert(k.page, /already/);
@@ -71,32 +71,61 @@ test.describe.serial("client management upgrade", () => {
     await page.waitForURL(/\/portal/);
     await page.goto("/portal/applications");
     await page.getByRole("link", { name: /FF-SA-/ }).first().click();
-    await expect(page.getByText("Instalment 1 of 2: Application fee")).toBeVisible();
+    // The price is locked in; nothing is invoiced until Finance confirms the schedule at initial invoicing.
+    await expect(page.getByTestId("instalment").first()).toContainText("Instalment 1: Application fee");
+    await expect(page.getByText(/Your price is locked in/)).toBeVisible();
+    await expect(page.getByText(/INV-\d{4}/)).toHaveCount(0);
     // The activation link works only once.
     await page.context().clearCookies();
     await page.goto(new URL(activation).pathname + new URL(activation).search);
     await expect(page.getByText(/no longer valid|expired|already been used/i)).toBeVisible();
   });
 
-  test("admin approves the consultant's request; the client disappears from available clients", async ({ browser }) => {
-    const a = await as(browser, "admin@firstflight.test");
-    await a.page.goto("/staff/assignments");
-    const card = a.page.locator("article", { hasText: `(${client.name})` });
-    await card.getByRole("button", { name: "Approve: assign to Yves Ndayisaba" }).click();
-    await expect(card).toHaveCount(0);
-    await a.page.goto("/staff/assignments?tab=history");
-    await expect(a.page.getByText(/FF-SA-\d{4}-\d{4}/).first()).toBeVisible();
-    const k1 = await as(browser, "consultant@firstflight.test");
-    await k1.page.goto("/staff/available");
-    await expect(k1.page.getByText(client.name)).toHaveCount(0);
+  test("the registering consultant serves the client; other consultants can't open it", async ({ browser }) => {
     const k = await as(browser, "consultant2@firstflight.test");
     await k.page.goto("/staff/applications");
     await k.page.getByRole("link", { name: /FF-SA-/ }).first().click();
     await k.page.waitForURL(/\/staff\/applications\//);
     appPath = new URL(k.page.url()).pathname;
-    // A consultant who isn't assigned gets nothing, even with the link.
+    await expect(k.page.getByText("Only an administrator can reassign or remove the assignment.")).toBeVisible();
+    await expect(k.page.getByRole("button", { name: /Reassign|Remove and make the client available|Unassign/ })).toHaveCount(0);
+    const k1 = await as(browser, "consultant@firstflight.test");
+    await k1.page.goto("/staff/available");
+    await expect(k1.page.getByText(client.name)).toHaveCount(0);
     expect((await k1.page.goto(appPath))!.status()).toBe(404);
-    await a.close(); await k1.close(); await k.close();
+    await k.close(); await k1.close();
+  });
+
+  test("self-assignment: first consultant wins, the second is told it's taken; only admin reassigns", async ({ browser }) => {
+    const other = { name: "Eric Habimana", email: `eric-${stamp}@example.test`, phone: `+25073${String(stamp).slice(-7)}` };
+    const a = await as(browser, "admin@firstflight.test");
+    await a.page.goto("/staff/clients/new");
+    await a.page.getByLabel("Full name").fill(other.name);
+    await a.page.getByLabel("Email", { exact: true }).fill(other.email);
+    await a.page.getByLabel("Phone (with country code)").fill(other.phone);
+    await a.page.getByLabel("Open an application for (optional)").selectOption({ label: "MSc Data Science, University of Manitoba" });
+    await a.page.getByRole("button", { name: "Create client account" }).click();
+    await ok(a.page, /Available clients until a consultant takes it/);
+    const k1 = await as(browser, "consultant@firstflight.test"), k2 = await as(browser, "consultant2@firstflight.test");
+    await k1.page.goto("/staff/available"); await k2.page.goto("/staff/available");
+    const card = (p: Page) => p.getByTestId("available-client").filter({ hasText: other.name });
+    await card(k2.page).getByRole("button", { name: "Assign to myself" }).click();
+    await ok(k2.page, /is now assigned to you/);
+    await card(k1.page).getByRole("button", { name: "Assign to myself" }).click(); // stale page
+    await alert(k1.page, /Too late: .* has already been assigned to Yves Ndayisaba/);
+    await k1.page.goto("/staff/notifications");
+    await expect(k1.page.getByText("Client already assigned").first()).toBeVisible();
+    // Admin reassigns (with a reason); history keeps both.
+    await a.page.goto("/staff/assignments?tab=assigned");
+    await a.page.locator("tr", { hasText: other.name }).getByRole("link", { name: "Reassign or remove" }).click();
+    await a.page.locator("#assignment").getByLabel("Consultant", { exact: true }).selectOption({ label: "Sandrine Umutoni" });
+    await a.page.locator("#assignment").getByLabel("Reason for reassigning").fill("Workload balance");
+    await a.page.locator("#assignment").getByRole("button", { name: "Reassign" }).click();
+    await ok(a.page, /Sandrine Umutoni/);
+    await a.page.goto("/staff/assignments?tab=history");
+    await expect(a.page.locator("li", { hasText: "Yves Ndayisaba → Sandrine Umutoni" }).first()).toBeVisible();
+    await expect(a.page.locator("li", { hasText: "(self-assigned)" }).first()).toBeVisible();
+    await a.close(); await k1.close(); await k2.close();
   });
 
   test("stage locks: no contract or processing before Finance approves the first instalment", async ({ browser }) => {
@@ -104,16 +133,37 @@ test.describe.serial("client management upgrade", () => {
     await k.page.goto(appPath);
     await k.page.getByLabel("Stage", { exact: true }).selectOption("PROCESSING");
     await k.page.getByRole("button", { name: "Save progress" }).click();
-    await alert(k.page, "Finance hasn't approved the first instalment yet");
+    await alert(k.page, /Finance hasn't (approved|confirmed)/);
     await expect(k.page.getByText("Locked until Finance approves the first instalment.")).toBeVisible();
-    // Eligibility done: moving to Initial payment is allowed.
+    // Finance can't confirm the schedule before the initial invoice stage.
+    const f0 = await as(browser, "finance@firstflight.test");
+    await f0.page.goto(appPath);
+    await f0.page.getByRole("button", { name: "Confirm schedule and issue the first invoice" }).click();
+    await alert(f0.page, "The schedule is set at Initial invoice and payment");
+    await f0.close();
+    // Eligibility done: moving to the initial invoice stage is allowed.
     await k.page.getByLabel("Stage", { exact: true }).selectOption("INITIAL_PAYMENT");
     await k.page.getByRole("button", { name: "Save progress" }).click();
-    await ok(k.page, "moved to Initial payment");
+    await ok(k.page, "moved to Initial invoice and payment");
     // Consultants can't reach payment verification.
     await k.page.goto("/staff/finance/verify");
     await expect(k.page.getByRole("heading", { name: "Payments to verify" })).toHaveCount(0);
     await k.close();
+  });
+
+  test("Finance confirms the schedule; only the first instalment is invoiced", async ({ browser }) => {
+    const f = await as(browser, "finance@firstflight.test");
+    await f.page.goto(appPath);
+    await expect(f.page.getByTestId("schedule-row")).toHaveCount(2);
+    await expect(f.page.getByTestId("schedule-row").nth(1).getByLabel("Becomes payable")).toHaveValue("OFFER_LETTER");
+    // Two instalments: no loan option anywhere.
+    await expect(f.page.getByText(/pay this final instalment with an approved loan/)).toHaveCount(0);
+    await f.page.getByRole("button", { name: "Confirm schedule and issue the first invoice" }).click();
+    await ok(f.page, /Invoiced now: INV-/);
+    await f.page.reload();
+    await expect(f.page.getByText("Instalment 1 of 2: Application fee").first()).toBeVisible();
+    await expect(f.page.getByText("Instalment 2 of 2")).toHaveCount(0);
+    await f.close();
   });
 
   test("client submits a payment with proof; Finance verifies it; receipt and invoice PDFs work", async ({ browser }) => {
@@ -155,7 +205,7 @@ test.describe.serial("client management upgrade", () => {
     // Another client can't open this client's invoice.
     const other = await as(browser, "client@firstflight.test");
     expect((await other.page.request.get(invoicePdf!)).status()).toBe(404);
-    // First instalment approved → the application moved to Document signing by itself.
+    // First instalment approved → the application moved to Contract signing by itself.
     await expect(c.page.getByText("Your contract is ready to sign.")).toBeVisible();
     await c.close(); await f.close(); await other.close();
   });
@@ -184,7 +234,7 @@ test.describe.serial("client management upgrade", () => {
     // Final collection stays locked until every instalment is approved.
     await k.page.getByLabel("Stage", { exact: true }).selectOption("FINAL_COLLECTION");
     await k.page.getByRole("button", { name: "Save progress" }).click();
-    await alert(k.page, "All instalments must be approved");
+    await alert(k.page, /Instalment 2 \(On admission\)|offer letter/);
     await c.close(); await k.close();
   });
 
@@ -278,6 +328,58 @@ test.describe.serial("client management upgrade", () => {
     await expect(c.page.getByText("Balance after contract amendment")).toBeVisible();
     await expect(c.page.getByText(/\$550(\.00)?/).first()).toBeVisible(); // 1,000 − 450 already paid
     await k.close(); await f.close(); await a.close(); await c.close();
+  });
+
+  test("Getting offer: the offer letter makes the next instalment payable; its approval moves to Visa processing", async ({ browser }) => {
+    const k = await as(browser, "consultant2@firstflight.test");
+    await k.page.goto(appPath);
+    await k.page.getByLabel("Stage", { exact: true }).selectOption("GETTING_OFFER");
+    await k.page.getByRole("button", { name: "Save progress" }).click();
+    await ok(k.page, "moved to Getting offer");
+    await k.page.getByLabel("Stage", { exact: true }).selectOption("VISA_PROCESSING");
+    await k.page.getByRole("button", { name: "Save progress" }).click();
+    await alert(k.page, /offer letter/);
+    await k.page.reload();
+    const offer = k.page.locator("#offer");
+    await offer.getByLabel("Offer letter (PDF, JPG or PNG)").setInputFiles(PDF);
+    await offer.getByLabel(/Description or internal note/).fill("Conditional offer, January intake");
+    await offer.getByRole("button", { name: "Upload offer letter" }).click();
+    await ok(k.page, "Offer letter uploaded");
+
+    const c = await as(browser, client.email, client.password);
+    await c.page.goto("/portal/notifications");
+    await expect(c.page.getByText("Your offer letter is available").first()).toBeVisible();
+    await c.page.goto("/portal/applications");
+    await c.page.getByRole("link", { name: /FF-SA-/ }).first().click();
+    const file = c.page.getByTestId("case-file").filter({ hasText: "Offer letter" });
+    const dl = await file.getByRole("link", { name: "Download" }).getAttribute("href");
+    expect((await c.page.request.get(dl!)).headers()["content-type"]).toBe("application/pdf");
+    await file.getByRole("link", { name: "Open" }).click();
+    await expect(c.page.getByTestId("pdf-frame")).toBeVisible();
+    await c.page.goBack();
+    // Now (and only now) the balance is payable.
+    const inv = c.page.locator("li", { hasText: "Instalment 2 of 2: Balance after contract amendment" }).first();
+    await expect(inv).toBeVisible();
+
+    await k.page.reload();
+    await expect(k.page.getByTestId("case-file").first()).toContainText("client opened it");
+    await k.page.getByLabel("Stage", { exact: true }).selectOption("VISA_PROCESSING");
+    await k.page.getByRole("button", { name: "Save progress" }).click();
+    await alert(k.page, /Instalment 2 .* must be paid and approved by Finance first/);
+
+    await inv.getByText(/I've paid INV-/).click();
+    await inv.getByLabel("Transaction reference").fill(`MM2-${stamp}`);
+    await inv.getByLabel("Date paid").fill(today());
+    await inv.getByLabel(/Proof of payment/).setInputFiles(PDF);
+    await inv.getByRole("button", { name: /Submit payment for INV-/ }).click();
+    await ok(c.page, /Finance/);
+    const f = await as(browser, "finance@firstflight.test");
+    await f.page.goto("/staff/finance/verify");
+    await f.page.locator("article", { hasText: `MM2-${stamp}` }).getByRole("button", { name: "Approve payment" }).click();
+    await expect(f.page.locator("article", { hasText: `MM2-${stamp}` })).toHaveCount(0);
+    await k.page.reload();
+    await expect(k.page.getByLabel("Stage", { exact: true })).toHaveValue("VISA_PROCESSING");
+    await k.close(); await c.close(); await f.close();
   });
 
   test("revoking a service takes effect at once; granting it back restores access", async ({ browser }) => {

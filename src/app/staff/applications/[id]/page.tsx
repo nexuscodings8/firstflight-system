@@ -4,7 +4,7 @@ import { desc, eq } from "drizzle-orm";
 import { db, schema as s } from "@/db";
 import { requireUser } from "@/lib/auth";
 import { canManageFinance, canUploadToApplication, canViewApplication, canWorkOnCase } from "@/lib/permissions";
-import { loadApplication } from "@/lib/applications";
+import { loadApplication, stepFacts } from "@/lib/applications";
 import { dateTime } from "@/lib/format";
 import { ApplicationView } from "@/components/application-view";
 import { InvoicesPanel } from "@/components/invoices-panel";
@@ -16,6 +16,8 @@ import { RequestsPanel } from "@/components/requests-panel";
 import { AssignmentPanel } from "@/components/assignment-panel";
 import { ContractPanel } from "@/components/contract-panel";
 import { AppointmentsPanel } from "@/components/appointments-panel";
+import { OfferPanel } from "@/components/offer-panel";
+import { HistoricalPanel } from "@/components/historical-panel";
 import { getOffice } from "@/lib/settings";
 import { refundInfo } from "@/lib/refund-info";
 import { OPEN_STATES } from "@/lib/refunds";
@@ -49,7 +51,7 @@ export default async function StaffApplication({ params }: { params: Promise<{ i
       <ApplicationView
         app={app} mode="staff" canUpload={canUploadToApplication(user, app)}
         stub={finance ? paidStub(app) : (() => { const [t, c] = clearance(app.invoices, nowMs()); return <><span className="muted">Payment clearance</span><span className={`badge ${c}`}>{t}</span></>; })()}
-        nextStep={nextStep(app, "staff")}
+        nextStep={nextStep({ ...app, ...stepFacts(app) }, "staff")}
         itemTools={work ? (c) => (c.documents.length > 0 && (c.state === "UPLOADED" || c.state === "REJECTED") ? <ReviewControls applicationId={app.id} itemId={c.id} label={c.label} /> : null) : undefined}
         checklistFooter={work && app.status === "ACTIVE" ? <details className="mt-4 rounded-xl bg-mist p-4"><summary className="cursor-pointer font-semibold text-brand">Request another document</summary><div className="mt-3"><RequestDocumentForm applicationId={app.id} /></div></details> : undefined}
         updatesFooter={work ? <div className="mt-5 border-t border-line pt-4"><h3 className="mb-2 text-base">Post an update or note</h3><UpdateForm applicationId={app.id} /></div> : undefined}
@@ -58,6 +60,8 @@ export default async function StaffApplication({ params }: { params: Promise<{ i
           <InvoicesPanel app={app} mode={finance ? "finance" : "summary"} rules={rules} />
           {work && <section className="card p-6"><h2 className="mb-3 text-xl">Progress</h2><ProgressForm applicationId={app.id} stage={app.stage} status={app.status} /></section>}
         </div>
+        <HistoricalPanel app={app} finance={finance || user.role === "ADMIN"} />
+        <OfferPanel app={app} mode="staff" canWork={work} />
         <div className="grid gap-6 lg:grid-cols-2">
           <ContractPanel app={app} mode="staff" canWork={work} role={user.role} seeMoney={finance || user.role === "ADMIN"} />
           {user.role !== "FINANCE" && <AppointmentsPanel app={app} mode="staff" canWork={work} office={work ? await getOffice() : undefined} />}

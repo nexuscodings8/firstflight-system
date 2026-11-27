@@ -24,14 +24,35 @@ async function openDemo(p: Page) {
 }
 
 test.describe.serial("phase 5: fees, refunds, changes and flights", () => {
-  test("finance applies the most specific fee plan; consultants see clearance only; fees stay private", async ({ browser, page }) => {
+  test("finance confirms a stage-based schedule; only the first instalment is invoiced; consultants see clearance only", async ({ browser, page }) => {
     const f = await as(browser, "finance@firstflight.test");
     await openDemo(f.page);
     const select = f.page.getByLabel("Fee (most specific first)");
     await expect(select.locator("option").first()).toHaveText(/Netherlands work placement/);
-    await f.page.getByRole("button", { name: "Apply fee plan and issue invoices" }).click();
-    await expect(f.page.getByText(/Agreed on .* in 3 instalments/)).toBeVisible();
+    await f.page.getByRole("button", { name: "Start from this fee" }).click();
+    await ok(f.page, /Draft from "Netherlands work placement"/);
+    // (The demo application reached the initial invoice stage in the phase 2 tests; before it, confirming is refused:
+    // see the upgrade tests.)
+    await f.page.reload();
+    const rows = f.page.getByTestId("schedule-row");
+    await expect(rows).toHaveCount(3);
+    await expect(f.page.getByTestId("schedule-sum")).toHaveText("Instalments add up to the total.");
+    await rows.nth(2).getByLabel("Amount").fill("400");
+    await expect(f.page.getByTestId("schedule-sum")).toContainText("short");
+    await f.page.getByRole("button", { name: "Confirm schedule and issue the first invoice" }).click();
+    await expect(f.page.getByRole("alert").filter({ hasText: "must match exactly" })).toBeVisible();
+    await f.page.getByRole("button", { name: "Split the rest evenly" }).click();
+    await rows.nth(0).getByLabel("Amount").fill("600");
+    await rows.nth(1).getByLabel("Amount").fill("450");
+    await rows.nth(2).getByLabel("Amount").fill("450");
+    await rows.nth(1).getByLabel("Becomes payable").selectOption("OFFER_LETTER");
+    await rows.nth(2).getByLabel("Becomes payable").selectOption("VISA");
+    await f.page.getByRole("button", { name: "Confirm schedule and issue the first invoice" }).click();
+    await ok(f.page, /Schedule confirmed. Invoiced now: INV-/);
+    await f.page.reload();
     await expect(f.page.getByText("Instalment 1 of 3: Deposit").first()).toBeVisible();
+    await expect(f.page.getByText(/Instalment 2 of 3/)).toHaveCount(0); // not invoiced before the offer letter
+    await expect(f.page.getByTestId("instalment").nth(1)).toContainText("Scheduled");
 
     // Changing the fee afterwards never changes the agreed price.
     await f.page.goto("/staff/finance/fees");
@@ -43,13 +64,16 @@ test.describe.serial("phase 5: fees, refunds, changes and flights", () => {
 
     const c = await as(browser, "client@firstflight.test");
     await openDemo(c.page);
-    await expect(c.page.getByText("Service fee").first()).toBeVisible();
+    await expect(c.page.getByText("Total agreed fee").first()).toBeVisible();
     await expect(c.page.getByText("€1,500").first()).toBeVisible();
+    await expect(c.page.getByTestId("amount-payable")).toContainText("€");
+    await expect(c.page.getByText("Instalment 1 of 3: Deposit").first()).toBeVisible();
+    await expect(c.page.getByText("Payable after your offer letter is received")).toBeVisible();
 
     const k = await as(browser, "consultant@firstflight.test");
     await openDemo(k.page);
     await expect(k.page.getByRole("heading", { name: "Payment clearance" })).toBeVisible();
-    await expect(k.page.getByText("Instalment 1 of 3: Deposit")).toBeVisible();
+    await expect(k.page.getByTestId("instalment").first()).toContainText("Deposit");
     await expect(k.page.getByText(/€1,500|€600/)).toHaveCount(0);
 
     await page.goto("/work/netherlands");

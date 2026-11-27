@@ -21,18 +21,39 @@ export async function sendMessage(_: St, fd: FormData): Promise<St> {
   const body = str(fd, "body", 4000);
   if (!body) return { error: "Write a message first." };
   const people = (await participants(c)).filter((p) => p.id !== user.id);
-  const mentions = findMentions(body, people);
+  // Colleagues concerned: @mentions in the text plus anyone ticked, but only people who can read this conversation.
+  const ticked = fd.getAll("concerned").map(String).filter((id) => people.some((p) => p.id === id));
+  const mentions = [...new Set([...findMentions(body, people), ...ticked])];
+  const parentId = str(fd, "parentId", 64) || null;
+  const parent = parentId ? await db.query.messages.findFirst({ where: and(eq(s.messages.id, parentId), eq(s.messages.conversationId, c.id)), columns: { id: true, authorId: true, body: true } }) : null;
+  if (parentId && !parent) return { error: "The message you're replying to isn't in this conversation." };
   const now = new Date();
   await db.transaction(async (tx) => {
-    await tx.insert(s.messages).values({ conversationId: c.id, authorId: user.id, body, mentions: mentions.length ? mentions : null, createdAt: now });
+    await tx.insert(s.messages).values({ conversationId: c.id, authorId: user.id, body, mentions: mentions.length ? mentions : null, parentId: parent?.id ?? null, createdAt: now });
     await tx.update(s.conversations).set({ lastMessageAt: now }).where(eq(s.conversations.id, c.id));
     await tx.insert(s.conversationMembers).values({ conversationId: c.id, userId: user.id, lastReadAt: now }).onConflictDoUpdate({ target: [s.conversationMembers.conversationId, s.conversationMembers.userId], set: { lastReadAt: now } });
     const where = c.kind === "APPLICATION" ? `${c.application?.reference}${c.financePrivate ? " (Finance only)" : ""}` : c.kind === "DIRECT" ? "a direct message" : (c.title ?? "a group");
-    for (const id of mentions) await notify(tx, { userId: id, title: `${user.name} mentioned you`, body: `In ${where}: ${body.slice(0, 120)}`, link: `/staff/messages/${c.id}` });
-    if (c.kind === "DIRECT") for (const p of people.filter((x) => !mentions.includes(x.id))) await notify(tx, { userId: p.id, title: `Message from ${user.name}`, body: body.slice(0, 140), link: `/staff/messages/${c.id}` });
+    const link = `/staff/messages/${c.id}`;
+    const told = new Set<string>([user.id]);
+    for (const id of mentions) { told.add(id); await notify(tx, { userId: id, title: `${user.name} mentioned you`, body: `In ${where}: ${body.slice(0, 120)}`, link }); }
+    if (parent && !told.has(parent.authorId) && people.some((p) => p.id === parent.authorId)) { told.add(parent.authorId); await notify(tx, { userId: parent.authorId, title: `${user.name} replied to you`, body: `In ${where}: ${body.slice(0, 120)}`, link }); }
+    // Followers (and members of direct and group chats) hear about every new message.
+    const followers = await tx.select({ id: s.conversationMembers.userId }).from(s.conversationMembers).where(and(eq(s.conversationMembers.conversationId, c.id), eq(s.conversationMembers.following, true)));
+    for (const f of followers) if (!told.has(f.id) && people.some((p) => p.id === f.id)) { told.add(f.id); await notify(tx, { userId: f.id, title: `New message in ${where}`, body: `${user.name}: ${body.slice(0, 120)}`, link }); }
   });
   revalidatePath(`/staff/messages/${c.id}`); revalidatePath("/staff/messages");
   return { ok: mentions.length ? `Sent. ${mentions.length} ${mentions.length === 1 ? "person was" : "people were"} notified.` : "Sent." };
+}
+
+/** Follow (or stop following) a conversation: followers are notified of every new message. */
+export async function toggleFollow(fd: FormData) {
+  const user = await requireUser([...STAFF]);
+  const c = await openConversation(user, str(fd, "conversationId", 64));
+  if (!c) redirect("/staff/messages?error=thread");
+  const follow = fd.get("follow") === "1";
+  await db.insert(s.conversationMembers).values({ conversationId: c.id, userId: user.id, following: follow })
+    .onConflictDoUpdate({ target: [s.conversationMembers.conversationId, s.conversationMembers.userId], set: { following: follow } });
+  revalidatePath(`/staff/messages/${c.id}`);
 }
 
 /** Opens (or reuses) a direct conversation with one staff member. */
@@ -46,7 +67,7 @@ export async function startDirect(fd: FormData) {
   if (!id) {
     id = await db.transaction(async (tx) => {
       const [c] = await tx.insert(s.conversations).values({ kind: "DIRECT", createdById: user.id }).returning({ id: s.conversations.id });
-      await tx.insert(s.conversationMembers).values([{ conversationId: c.id, userId: user.id }, { conversationId: c.id, userId: other.id }]);
+      await tx.insert(s.conversationMembers).values([{ conversationId: c.id, userId: user.id, following: true }, { conversationId: c.id, userId: other.id, following: true }]);
       return c.id;
     });
   }
@@ -67,7 +88,7 @@ export async function createGroup(_: St, fd: FormData): Promise<St> {
   if (bad) return { error: bad };
   const id = await db.transaction(async (tx) => {
     const [c] = await tx.insert(s.conversations).values({ kind: "GROUP", title, financePrivate, createdById: user.id }).returning({ id: s.conversations.id });
-    await tx.insert(s.conversationMembers).values([user.id, ...ids].map((u) => ({ conversationId: c.id, userId: u })));
+    await tx.insert(s.conversationMembers).values([user.id, ...ids].map((u) => ({ conversationId: c.id, userId: u, following: true })));
     for (const u of ids) await notify(tx, { userId: u, title: `Added to "${title}"`, body: `${user.name} added you to a ${financePrivate ? "Finance-only " : ""}group.`, link: `/staff/messages/${c.id}` });
     return c.id;
   });

@@ -18,10 +18,10 @@ export async function reviewSubmission(_: VerState, fd: FormData): Promise<VerSt
   const approve = fd.get("decision") === "approve";
   const internal = String(fd.get("internalNote") ?? "").trim().slice(0, 1000) || null;
   if (approve) {
-    if (x.loanFunded && fd.get("loanValidated") !== "on") return { error: "This payment is loan-funded. Confirm you validated the loan arrangement before approving." };
+    if (x.loanFunded) return { error: "Loan-funded payments are no longer approved here. Reject this one and ask the client to request a loan on an eligible third instalment." };
     try {
       const r = await db.transaction(async (tx) => {
-        const res = await approvePaymentTx(tx, { invoiceId: x.invoiceId, cents: Math.round(Number(x.amount) * 100), method: x.method, reference: x.reference, paidAt: x.paidAt, note: x.clientNote, loanFunded: x.loanFunded, loanProvider: x.loanProvider, actor: me });
+        const res = await approvePaymentTx(tx, { invoiceId: x.invoiceId, cents: Math.round(Number(x.amount) * 100), method: x.method, reference: x.reference, paidAt: x.paidAt, note: x.clientNote, actor: me });
         await tx.update(s.paymentSubmissions).set({ status: "APPROVED", reviewedById: me.id, reviewedAt: new Date(), internalNote: internal, paymentId: res.payment.id }).where(eq(s.paymentSubmissions.id, x.id));
         return res;
       });

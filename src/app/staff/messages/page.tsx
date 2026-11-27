@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { and, asc, eq, inArray, ne } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, ne } from "drizzle-orm";
 import { db, schema as s } from "@/db";
 import { requireUser } from "@/lib/auth";
 import { listConversations } from "@/lib/messaging";
@@ -11,18 +11,37 @@ import { createGroup, startDirect } from "./actions";
 
 export const metadata = { title: "Messages" };
 
-export default async function Messages({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+export default async function Messages({ searchParams }: { searchParams: Promise<{ error?: string; q?: string }> }) {
   const user = await requireUser(["ADMIN", "CONSULTANT", "FINANCE", "CONTENT_MANAGER"], "/staff/messages");
-  const err = (await searchParams).error;
+  const sp = await searchParams;
+  const err = sp.error;
+  const q = (sp.q ?? "").trim().slice(0, 80);
   const [convs, staff] = await Promise.all([
     listConversations(user),
     db.select({ id: s.users.id, name: s.users.name, role: s.users.role }).from(s.users).where(and(eq(s.users.active, true), ne(s.users.id, user.id), inArray(s.users.role, ["ADMIN", "CONSULTANT", "FINANCE", "CONTENT_MANAGER"]))).orderBy(asc(s.users.name)),
   ]);
   const financeSide = user.role === "FINANCE" || user.role === "ADMIN";
+  // Search only inside conversations this user may read (the same check as opening them).
+  const titles = new Map(convs.map((c) => [c.id, c.title]));
+  const hits = q.length >= 2 && convs.length ? await db.query.messages.findMany({
+    where: and(inArray(s.messages.conversationId, convs.map((c) => c.id)), ilike(s.messages.body, `%${q.replace(/[%_\\]/g, (m) => `\\${m}`)}%`)),
+    orderBy: [desc(s.messages.createdAt)], limit: 50, with: { author: { columns: { name: true } } },
+  }) : [];
   return (
     <div className="grid gap-5">
       <AutoRefresh seconds={15} />
       <div><h1 className="text-[clamp(26px,3vw,36px)]">Messages</h1><p className="mt-1 max-w-2xl text-sm muted">Internal staff conversations. Clients never see these. Mention someone with @ and their name to notify them.</p></div>
+      <form action="/staff/messages" role="search" className="flex flex-wrap gap-2">
+        <label className="sr-only" htmlFor="msg-q">Search conversations</label>
+        <input id="msg-q" name="q" defaultValue={q} className="input max-w-md flex-1" placeholder="Search previous conversations" />
+        <button className="btn-primary btn-sm">Search</button>{q && <Link className="btn-ghost btn-sm" href="/staff/messages">Clear</Link>}
+      </form>
+      {q && (
+        <section className="card p-4" aria-label="Search results">
+          <h2 className="text-base">{hits.length ? `${hits.length} message${hits.length === 1 ? "" : "s"} matching “${q}”` : `No messages match “${q}”`}</h2>
+          <ul className="mt-2 divide-y divide-line">{hits.map((m) => <li key={m.id} data-testid="search-hit"><Link href={`/staff/messages/${m.conversationId}#m-${m.id}`} className="block py-2 hover:bg-mist/60"><p className="text-xs muted">{titles.get(m.conversationId)} · {m.author.name} · {dateTime(m.createdAt)}</p><p className="text-sm">{m.body.slice(0, 200)}</p></Link></li>)}</ul>
+        </section>
+      )}
       {err && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{err === "thread" ? "You can't open that thread." : "You can't message that person."}</p>}
       <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <section className="card p-0" aria-label="Conversations">

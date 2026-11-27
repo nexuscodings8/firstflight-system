@@ -16,6 +16,14 @@ const AREAS: Record<string, { text: string; prefixes: string[] }> = {
   users: { text: "Accounts", prefixes: ["user."] },
 };
 
+/** "previous → new" for stage and status changes recorded with an action. */
+function statusChange(c: unknown) {
+  const ch = c as Record<string, [unknown, unknown]> | null;
+  if (!ch) return null;
+  const parts = ["stage", "status", "importedStage"].filter((k) => Array.isArray(ch[k]) && ch[k][0] !== ch[k][1]).map((k) => `${k === "importedStage" ? "recorded stage" : k}: ${ch[k][0] ?? "none"} → ${ch[k][1]}`);
+  return parts.length ? <span className="ml-1 text-xs muted">({parts.join("; ").toLowerCase().replace(/_/g, " ")})</span> : null;
+}
+
 export default async function ActivityPage({ searchParams }: { searchParams: Promise<{ area?: string; q?: string; days?: string }> }) {
   await requireUser(["ADMIN"], "/staff/activity");
   const sp = await searchParams;
@@ -41,7 +49,7 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
           {rows.map((a) => (
             <li key={a.id} className="flex flex-wrap gap-x-4 gap-y-1 py-2.5">
               <span className="w-40 shrink-0 muted">{dateTime(a.createdAt)}</span>
-              <span className="flex-1">{a.summary}{a.applicationId && <> · <Link className="text-brand underline" href={`/staff/applications/${a.applicationId}`}>open</Link></>}</span>
+              <span className="flex-1">{a.summary}{statusChange(a.changes)}{a.applicationId && <> · <Link className="text-brand underline" href={`/staff/applications/${a.applicationId}`}>open</Link></>}</span>
               <span className="text-xs muted">{a.actor ? `${a.actor.name} (${label(a.actor.role)})` : "Website visitor"}</span>
             </li>
           ))}

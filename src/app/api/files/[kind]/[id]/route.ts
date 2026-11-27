@@ -39,6 +39,18 @@ export async function GET(req: Request, ctx: { params: Promise<{ kind: string; i
     if (!a?.attachmentKey || !canViewApplication(user, a.application)) return nf;
     return fileResponse(a.attachmentKey, a.attachmentName ?? "attachment.pdf", mimeOf(a.attachmentName ?? "x.pdf"), inline);
   }
+  if (kind === "case") {
+    // Offer letters, visas and documents from before the platform. Payment evidence is Finance/Admin only.
+    const f = await db.query.caseFiles.findFirst({ where: eq(s.caseFiles.id, id), with: { application: appCols } });
+    if (!f || !canViewApplication(user, f.application)) return nf;
+    if (f.kind === "PAYMENT_EVIDENCE" && user.role !== "FINANCE" && user.role !== "ADMIN") return nf;
+    return fileResponse(f.storageKey, f.fileName, f.mimeType, inline);
+  }
+  if (kind === "loan") {
+    const l = await db.query.loanRequests.findFirst({ where: eq(s.loanRequests.id, id), with: { application: appCols } });
+    if (!l?.docKey || !(user.role === "FINANCE" || user.role === "ADMIN" || (user.role === "CLIENT" && l.application.clientId === user.id))) return nf;
+    return fileResponse(l.docKey, l.docName ?? "loan.pdf", l.docMime ?? mimeOf(l.docName ?? "x.pdf"), inline);
+  }
   return nf;
 }
 

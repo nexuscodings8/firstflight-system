@@ -14,6 +14,7 @@ export async function clientApps(clientId: string) {
       consultant: { columns: { name: true } },
       checklist: { orderBy: [asc(s.checklistItems.sortOrder)], with: { documents: { columns: { id: true, fileName: true, createdAt: true } } } },
       invoices: { orderBy: [asc(s.invoices.createdAt)], with: { payments: { orderBy: [asc(s.payments.paidAt)] } } },
+      caseFiles: { columns: { id: true, kind: true, title: true, createdAt: true, clientViewedAt: true } },
       refunds: { orderBy: [desc(s.refundRequests.createdAt)], with: { invoice: { columns: { number: true } } } },
       amendments: { orderBy: [desc(s.amendmentRequests.createdAt)] },
     },

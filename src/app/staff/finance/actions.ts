@@ -65,12 +65,11 @@ export async function recordPayment(_: FinState, fd: FormData): Promise<FinState
   if (cents > due) return { error: `That is more than the balance of ${money(fromCents(due), inv.currency)}.` };
   const dupe = await db.query.payments.findFirst({ where: eq(s.payments.reference, reference), with: { invoice: { columns: { number: true } } } });
   if (dupe) return { error: `Reference ${reference} was already recorded on ${dupe.invoice.number} (receipt ${dupe.receiptNumber}). Check you are not entering the same payment twice.` };
-  const loanFunded = fd.get("loanFunded") === "on";
-  const loanProvider = str(fd, "loanProvider", 120);
-  if (loanFunded && loanProvider.length < 2) return { error: "Name the loan provider or arrangement." };
+  // Loans are never recorded here: they go through a loan request on an eligible third instalment.
+  if (fd.get("loanFunded")) return { error: "Loan-based payments are approved under Loan requests, only for an eligible third instalment." };
   let pay;
   try {
-    pay = (await db.transaction((tx) => approvePaymentTx(tx, { invoiceId: inv.id, cents, method, reference, paidAt, note, loanFunded, loanProvider, actor: user }))).payment;
+    pay = (await db.transaction((tx) => approvePaymentTx(tx, { invoiceId: inv.id, cents, method, reference, paidAt, note, actor: user }))).payment;
   } catch (e) {
     const msg = paymentError(e, reference);
     if (msg) return { error: msg };

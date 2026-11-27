@@ -8,7 +8,7 @@ import { money } from "./format";
 import { autoAdvance } from "./progress";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
-export type Method = "CASH" | "BANK_TRANSFER" | "MOBILE_MONEY" | "CARD";
+export type Method = "CASH" | "BANK_TRANSFER" | "MOBILE_MONEY" | "CARD" | "LOAN";
 
 /**
  * Finance approves money against an invoice: one locked transaction that blocks overpayment and duplicate
@@ -17,7 +17,10 @@ export type Method = "CASH" | "BANK_TRANSFER" | "MOBILE_MONEY" | "CARD";
 export async function approvePaymentTx(tx: Tx, p: {
   invoiceId: string; cents: number; method: Method; reference: string; paidAt: Date; note?: string | null;
   loanFunded?: boolean; loanProvider?: string | null; actor: { id: string; name: string };
+  /** Only the loan approval flow may record a LOAN payment. */ viaLoanApproval?: boolean;
+  /** A payment made before the platform, validated by Finance. */ historical?: boolean;
 }) {
+  if ((p.method === "LOAN" || p.loanFunded) && !p.viaLoanApproval) throw Object.assign(new Error("loan"), { code: "LOAN" });
   const [inv] = await tx.select().from(s.invoices).where(eq(s.invoices.id, p.invoiceId)).for("update");
   if (!inv || inv.status === "VOID") throw Object.assign(new Error("void"), { code: "VOID" });
   const [app] = await tx.select().from(s.applications).where(eq(s.applications.id, inv.applicationId));
@@ -27,7 +30,7 @@ export async function approvePaymentTx(tx: Tx, p: {
   const [dupe] = await tx.select({ id: s.payments.id }).from(s.payments).where(eq(s.payments.reference, p.reference)).limit(1);
   if (dupe) throw Object.assign(new Error("dupe"), { code: "23505" });
   const receiptNumber = await nextRef(tx, "RC");
-  const [row] = await tx.insert(s.payments).values({ invoiceId: inv.id, amount: fromCents(p.cents), method: p.method, reference: p.reference, receiptNumber, paidAt: p.paidAt, note: p.note || null, loanFunded: !!p.loanFunded, loanProvider: p.loanFunded ? p.loanProvider ?? null : null, recordedById: p.actor.id }).returning();
+  const [row] = await tx.insert(s.payments).values({ invoiceId: inv.id, amount: fromCents(p.cents), method: p.method, reference: p.reference, receiptNumber, paidAt: p.paidAt, note: p.note || null, loanFunded: !!p.loanFunded, loanProvider: p.loanFunded ? p.loanProvider ?? null : null, historical: !!p.historical, recordedById: p.actor.id }).returning();
   const status = statusAfterPayments(inv.status, Math.round(Number(inv.amount) * 100), before + p.cents);
   await tx.update(s.invoices).set({ status }).where(eq(s.invoices.id, inv.id));
   await logActivity(tx, { actorId: p.actor.id, action: "payment.approved", entityType: "payment", entityId: row.id, applicationId: inv.applicationId,
@@ -43,6 +46,7 @@ export function paymentError(e: unknown, reference: string) {
   const code = (e as { code?: string }).code ?? (e as { cause?: { code?: string } }).cause?.code;
   if (code === "OVERPAY") return "That is more than the balance still due on this invoice. Reload the page and check.";
   if (code === "VOID") return "This invoice is void.";
+  if (code === "LOAN") return "Loan-based payments are approved under Loan requests, only for an eligible third instalment.";
   if (code === "23505") return `Reference ${reference} has already been recorded. Check you are not entering the same payment twice.`;
   return null;
 }

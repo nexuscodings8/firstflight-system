@@ -7,8 +7,9 @@ import { SERVICE_PREFIX } from "./ref-format";
 import { logActivity, notify } from "./activity";
 import { matchingRules } from "./fees";
 import { scopeOf } from "./fee-scope";
-import { applyPlan, allRules } from "./fee-plan";
+import { draftPlan, allRules } from "./fee-plan";
 import { money } from "./format";
+import { assignInTx } from "./assignment";
 
 type Selection = NonNullable<Awaited<ReturnType<typeof resolveSelection>>>;
 
@@ -26,7 +27,12 @@ export const consultantsFor = (service: string) =>
  * Enforces one active application per client inside the transaction, attaches the listing's checklist,
  * and applies the matching service fee so the agreed price and instalments are fixed from the start.
  */
-export async function createApplication(opts: { client: { id: string; name: string }; sel: Selection; note: string | null; actor: { id: string; name: string }; via: "client" | "staff" }) {
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+export async function createApplication(opts: {
+  client: { id: string; name: string }; sel: Selection; note: string | null; actor: { id: string; name: string }; via: "client" | "staff";
+  /** Assign this consultant straight away (a consultant registering a client serves them). */ assignTo?: { id: string; name: string; self: boolean };
+  /** Extra work in the same transaction, e.g. recording an existing client's history. Throw to cancel everything. */ afterCreate?: (tx: Tx, app: typeof s.applications.$inferSelect) => Promise<void>;
+}) {
   const { client, sel, actor } = opts;
   const scope = await scopeOf({ service: sel.service, jobId: sel.jobId ?? null, programId: sel.programId ?? null, visaGuidanceId: sel.visaGuidanceId ?? null });
   const rule = matchingRules(await allRules(), scope)[0];
@@ -50,13 +56,18 @@ export async function createApplication(opts: { client: { id: string; name: stri
       selection: { title: sel.title, details: sel.details, visa: sel.visa ?? null, submittedAt: new Date().toISOString() }, clientNote: opts.note,
     }).returning();
     if (sel.checklist.length) await tx.insert(s.checklistItems).values(sel.checklist.map((c, i) => ({ applicationId: a.id, label: c.label, mandatory: c.mandatory, sortOrder: i })));
-    const plan = rule ? await applyPlan(tx, a, rule, { id: actor.id, name: "FIRST FLIGHT (agreed at application)" }) : null;
+    const plan = rule ? await draftPlan(tx, { id: a.id, service: a.service }, rule, "Agreed at application") : null;
     await logActivity(tx, { actorId: actor.id, action: "application.submitted", entityType: "application", entityId: a.id, applicationId: a.id,
       summary: opts.via === "client" ? `${client.name} submitted ${reference}: ${sel.title}` : `${actor.name} created ${reference} for ${client.name}: ${sel.title}` });
-    if (plan) await logActivity(tx, { actorId: actor.id, action: "fee.applied", entityType: "application", entityId: a.id, applicationId: a.id, summary: `Fee "${plan.ruleName}" (${money(plan.amount, plan.currency)} in ${plan.installments.length} instalment${plan.installments.length === 1 ? "" : "s"}) agreed for ${reference}` });
-    await notify(tx, { role: "ADMIN", title: "New application to assign", body: `${reference}: ${sel.title} from ${client.name}`, link: `/staff/assignments` });
-    for (const k of await consultantsFor(sel.service)) await notify(tx, { userId: k.id, title: "New client available", body: `${reference}: ${sel.title}. Request to serve them under Available clients.`, link: "/staff/available" });
-    await notify(tx, { userId: client.id, title: "Application received", body: `We received ${reference} (${sel.title}). A consultant will be assigned shortly.`, link: `/portal/applications/${a.id}` });
+    if (plan) await logActivity(tx, { actorId: actor.id, action: "fee.applied", entityType: "application", entityId: a.id, applicationId: a.id, summary: `Fee "${plan.ruleName}" (${money(plan.amount, plan.currency)} in ${plan.installments.length} instalment${plan.installments.length === 1 ? "" : "s"}) locked in for ${reference}; Finance confirms the instalment schedule at initial invoicing` });
+    if (opts.assignTo) {
+      await assignInTx(tx, a, opts.assignTo, actor, opts.assignTo.self ? "SELF_ASSIGNED" : "ASSIGNED", opts.assignTo.self ? "Registered this client" : null);
+    } else {
+      await notify(tx, { role: "ADMIN", title: "New application to assign", body: `${reference}: ${sel.title} from ${client.name}`, link: `/staff/assignments` });
+      for (const k of await consultantsFor(sel.service)) await notify(tx, { userId: k.id, title: "New client available", body: `${reference}: ${sel.title}. Assign them to yourself under Available clients.`, link: "/staff/available" });
+    }
+    if (opts.afterCreate) await opts.afterCreate(tx, a);
+    await notify(tx, { userId: client.id, title: "Application received", body: `We received ${reference} (${sel.title}).${opts.assignTo ? "" : " A consultant will be assigned shortly."}`, link: `/portal/applications/${a.id}` });
     return { created: a };
   });
   return result;

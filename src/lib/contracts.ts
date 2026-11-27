@@ -2,6 +2,7 @@ import "server-only";
 import type { FeePlan } from "./fees";
 import { SERVICE_LABEL, date, money } from "./format";
 import { Pdf } from "./pdf";
+import { conditionOf, conditionText } from "./schedule";
 
 type AppLike = { reference: string; service: string; selection: unknown; feePlan: unknown; client: { name: string; email: string | null; phone: string | null } };
 
@@ -13,7 +14,7 @@ export function renderContract(body: string, app: AppLike, now = new Date()) {
     client_name: app.client.name, client_email: app.client.email ?? "-", client_phone: app.client.phone ?? "-",
     reference: app.reference, listing: sel?.title ?? "-", service: SERVICE_LABEL[app.service] ?? app.service,
     fee: plan ? money(plan.amount, plan.currency) ?? "-" : "to be confirmed by FIRST FLIGHT",
-    installments: plan ? plan.installments.map((x, i) => `${i + 1}. ${x.label}: ${money(x.amount, plan.currency)}, due ${date(new Date(x.dueDate))}`).join("\n") : "to be confirmed by FIRST FLIGHT",
+    installments: plan ? plan.installments.map((x, i) => `${i + 1}. ${x.label}: ${money(x.amount, plan.currency)}, ${x.dueDate && x.invoiceId ? `due ${date(new Date(x.dueDate))}` : conditionText(conditionOf(x)).toLowerCase()}`).join("\n") : "to be confirmed by FIRST FLIGHT",
     date: date(now) ?? "",
   };
   return body.replace(/\{\{\s*(\w+)\s*\}\}/g, (m, k: string) => values[k] ?? m);

@@ -11,11 +11,13 @@ import { logActivity, notify } from "@/lib/activity";
 import { emailUser } from "@/lib/email";
 import { fromCents, parseAmount } from "@/lib/finance";
 import { money } from "@/lib/format";
-import { addDays, type FeePlan } from "@/lib/fees";
+import type { FeePlan } from "@/lib/fees";
 import { nextRef } from "@/lib/refs";
 import { saveBytes } from "@/lib/storage";
 import { isErr, storeUpload } from "@/lib/upload";
 import { sameName, signedContractPdf } from "@/lib/contracts";
+import { activateDue } from "@/lib/fee-plan";
+import { conditionOf, conditionText } from "@/lib/schedule";
 import { AMENDMENT_KINDS } from "@/lib/requests";
 
 type St = { ok?: string; error?: string } | undefined;
@@ -121,18 +123,18 @@ export async function signAmendment(_: St, fd: FormData): Promise<St> {
       const oldPlan = app.feePlan as FeePlan | null;
       const currency = oldPlan?.currency ?? pos.currency ?? "USD";
       for (const inv of pos.voidable) await tx.update(s.invoices).set({ status: "VOID" }).where(eq(s.invoices.id, inv.id));
-      const rows: FeePlan["installments"] = pos.keep.map((i) => ({ label: i.description, amount: i.amount, dueDate: (i.dueDate ?? i.createdAt).toISOString(), invoiceId: i.id, invoiceNumber: i.number }));
+      // Paid instalments stay as they are; the new balance becomes one instalment payable under the condition of the
+      // first instalment that wasn't paid yet (so nothing is billed before it's due).
+      const keptIds = new Set(pos.keep.map((i) => i.id));
+      const oldRows = oldPlan?.installments ?? [];
+      const rows: FeePlan["installments"] = pos.keep.map((i) => { const was = oldRows.find((r) => r.invoiceId === i.id); return { ...(was ?? {}), label: was?.label ?? i.description, amount: i.amount, dueDate: (i.dueDate ?? i.createdAt).toISOString(), invoiceId: i.id, invoiceNumber: i.number }; });
+      const firstOpen = oldRows.find((r) => !r.invoiceId || !keptIds.has(r.invoiceId));
       const rest = newCents - pos.keptCents;
-      if (rest > 0) {
-        const number = await nextRef(tx, "INV");
-        const due = addDays(now, 14);
-        const [inv] = await tx.insert(s.invoices).values({ number, applicationId: app.id, description: "Balance after contract amendment", amount: fromCents(rest), currency, dueDate: due, status: "ISSUED", createdById: a.approvedById ?? user.id }).returning();
-        rows.push({ label: inv.description, amount: inv.amount, dueDate: due.toISOString(), invoiceId: inv.id, invoiceNumber: number });
-      }
-      const plan: FeePlan = { ruleId: oldPlan?.ruleId ?? "amendment", ruleName: `Amended: ${oldPlan?.ruleName ?? "service fee"}`, amount: a.newFeeAmount, currency, appliedAt: now.toISOString(), appliedBy: "Contract amendment", installments: rows };
+      if (rest > 0) rows.push({ label: "Balance after contract amendment", amount: fromCents(rest), condition: firstOpen ? conditionOf(firstOpen) : "INITIAL", dueDays: 14, loanEligible: false, historical: false, dueDate: null, invoiceId: null, invoiceNumber: null });
+      const plan: FeePlan = { ruleId: oldPlan?.ruleId ?? "amendment", ruleName: `Amended: ${oldPlan?.ruleName ?? "service fee"}`, amount: a.newFeeAmount, currency, appliedAt: now.toISOString(), appliedBy: "Contract amendment", confirmedAt: now.toISOString(), confirmedBy: "Contract amendment", confirmedById: a.approvedById ?? user.id, installments: rows };
       const history = [...((app.feePlanHistory as FeePlan[] | null) ?? []), ...(oldPlan ? [oldPlan] : [])];
       await tx.update(s.applications).set({ feePlan: plan, feePlanHistory: history }).where(eq(s.applications.id, app.id));
-      feeText = `\n\nNew total service fee: ${money(a.newFeeAmount, currency)}. Unpaid instalments under the previous fee are cancelled${rest > 0 ? `; the balance of ${money(fromCents(rest), currency)} is billed separately` : ""}.`;
+      feeText = `\n\nNew total service fee: ${money(a.newFeeAmount, currency)}. Unpaid instalments under the previous fee are cancelled${rest > 0 ? `; the balance of ${money(fromCents(rest), currency)} is payable ${firstOpen ? conditionText(conditionOf(firstOpen)).replace("Payable ", "").toLowerCase() : "now"}` : ""}.`;
     }
     const number = await nextRef(tx, "AM");
     const title = `Contract amendment: ${AMENDMENT_KINDS[a.kind as keyof typeof AMENDMENT_KINDS] ?? a.kind}`;
@@ -143,6 +145,7 @@ export async function signAmendment(_: St, fd: FormData): Promise<St> {
     await logActivity(tx, { actorId: user.id, action: "amendment.signed", entityType: "amendment", entityId: a.id, applicationId: app.id, summary: `${user.name} signed contract amendment ${number} for ${app.reference}${a.newFeeAmount ? ` (new fee applied)` : ""}` });
     for (const uid of [a.createdById, app.consultantId].filter((x, i, arr): x is string => !!x && arr.indexOf(x) === i)) await notify(tx, { userId: uid, title: "Amendment signed", body: app.reference, link: `/staff/applications/${app.id}#contract` });
     if (a.newFeeAmount) await notify(tx, { role: "FINANCE", title: "Fee changed by a signed amendment", body: app.reference, link: `/staff/applications/${app.id}` });
+    if (a.newFeeAmount) await activateDue(tx, app.id, a.approvedById ?? user.id);
     return { ok: "Amendment signed. A copy is saved with your contract." };
   });
   refresh(app.id);

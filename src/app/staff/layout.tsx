@@ -20,6 +20,7 @@ async function sections(user: CurrentUser): Promise<NavItem[]> {
   const notes: NavItem = { href: "/staff/notifications", label: "Notifications", icon: "bell", count: unread };
   const msgs: NavItem = { href: "/staff/messages", label: "Messages", icon: "msg", count: await unreadTotal(user) };
   const pendingPay = () => n(db.select({ n: count() }).from(s.paymentSubmissions).where(eq(s.paymentSubmissions.status, "PENDING")));
+  const pendingLoans = () => n(db.select({ n: count() }).from(s.loanRequests).where(eq(s.loanRequests.status, "PENDING_REVIEW")));
   if (user.role === "CONSULTANT") {
     const mine = and(eq(s.applications.consultantId, user.id), eq(s.applications.status, "ACTIVE"));
     const services = user.services ?? [];
@@ -38,6 +39,7 @@ async function sections(user: CurrentUser): Promise<NavItem[]> {
       { href: "/staff/applications?check=1", label: "Documents to check", icon: "doc", count: check },
       { href: "/staff/available", label: "Available clients", icon: "users", count: avail },
       { href: "/staff/clients/new", label: "Register a client", icon: "plus" },
+      { href: "/staff/clients/new?existing=1", label: "Register existing client", icon: "upload" },
       { href: "/staff/refunds", label: "Refund reviews", icon: "refund", count: refundsToReview },
       { href: "/staff/enquiries", label: "Enquiries", icon: "msg", count: enq },
       msgs,
@@ -56,6 +58,7 @@ async function sections(user: CurrentUser): Promise<NavItem[]> {
       { href: "/staff", label: "Overview", icon: "grid" },
       { href: "/staff/applications", label: "Applications", icon: "file" },
       { href: "/staff/finance/verify", label: "Payments to verify", icon: "checkcircle", count: verify },
+      { href: "/staff/finance/loans", label: "Loan requests", icon: "key", count: await pendingLoans() },
       { href: "/staff/finance", label: "Balances due", icon: "wallet", count: unpaid },
       { href: "/staff/finance?show=all", label: "All invoices", icon: "receipt" },
       { href: "/staff/finance/fees", label: "Service fees", icon: "tag" },
@@ -102,8 +105,10 @@ async function sections(user: CurrentUser): Promise<NavItem[]> {
     { href: "/staff/applications", label: "Applications", icon: "file" },
     { href: "/staff/assignments", label: "Assignments", icon: "users", count: requests + unassigned },
     { href: "/staff/clients/new", label: "Register a client", icon: "plus" },
+    { href: "/staff/clients/new?existing=1", label: "Register existing client", icon: "upload" },
     { href: "/staff/enquiries", label: "Enquiries", icon: "msg", count: enq },
     { href: "/staff/finance/verify", label: "Payments to verify", icon: "checkcircle", count: verify },
+    { href: "/staff/finance/loans", label: "Loan requests", icon: "key", count: await pendingLoans() },
     { href: "/staff/finance", label: "Invoices", icon: "receipt" },
     { href: "/staff/finance/fees", label: "Service fees", icon: "tag" },
     { href: "/staff/refunds", label: "Refunds", icon: "refund", count: refunds },

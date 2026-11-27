@@ -1,8 +1,10 @@
 "use server";
 // Consultant (and admin) case work on one application. Every action re-checks access on the server,
 // writes the change and its activity record in one transaction, then notifies and emails after it commits.
-import { stageBlock } from "@/lib/stage-rules";
+import { stageBlock } from "@/lib/schedule";
 import { factsFor } from "@/lib/progress";
+import { activateDue } from "@/lib/fee-plan";
+import { planConfirmed, type FeePlan } from "@/lib/fees";
 import { revalidatePath } from "next/cache";
 import { and, eq, max } from "drizzle-orm";
 import { db, schema as s } from "@/db";
@@ -85,12 +87,16 @@ export async function updateProgress(_: CaseState, fd: FormData): Promise<CaseSt
     // Stage locks: re-check payments and the contract inside the transaction, with the application row locked.
     await tx.select({ id: s.applications.id }).from(s.applications).where(eq(s.applications.id, app.id)).for("update");
     const forward = status === "COMPLETED" || STAGES.indexOf(finalStage) > STAGES.indexOf(app.stage as (typeof STAGES)[number]);
-    if (forward) { const why = stageBlock(finalStage, status === "COMPLETED", await factsFor(tx, app.id)); if (why) return why; }
+    if (forward) { const why = stageBlock(finalStage, status === "COMPLETED", (await factsFor(tx, app.id)).gate); if (why) return why; }
     await tx.update(s.applications).set({ stage: finalStage, status }).where(eq(s.applications.id, app.id));
     if (message) await tx.insert(s.applicationUpdates).values({ applicationId: app.id, authorId: user.id, body: message, visibility: "CLIENT" });
     await logActivity(tx, { actorId: user.id, action: "application.progress", entityType: "application", entityId: app.id, applicationId: app.id,
       summary: `${user.name} ${what}: ${app.reference}`, changes: { stage: [app.stage, finalStage], status: [app.status, status] } });
     await notify(tx, { userId: app.clientId, title: "Application updated", body: `${app.reference} ${what}.`, link: clientLink(app.id) });
+    // A stage condition may now be met (instalment payable at this stage); invoice it, and only it.
+    await activateDue(tx, app.id, user.id);
+    if (finalStage === "INITIAL_PAYMENT" && app.stage !== "INITIAL_PAYMENT" && !planConfirmed(app.feePlan as FeePlan | null))
+      await notify(tx, { role: "FINANCE", title: "Instalment schedule to confirm", body: `${app.reference} reached ${STAGE_LABEL.INITIAL_PAYMENT}. Confirm the schedule to issue the first invoice.`, link: `/staff/applications/${app.id}#schedule` });
     return null;
   });
   if (blocked) return { error: blocked };

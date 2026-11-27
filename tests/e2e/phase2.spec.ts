@@ -80,9 +80,9 @@ test.describe.serial("phase 2: staff workflows", () => {
     await k.page.getByRole("button", { name: "Post", exact: true }).click();
     await expect(k.page.getByRole("status").filter({ hasText: "Internal note saved." })).toBeVisible();
 
-    await k.page.getByLabel("Stage", { exact: true }).selectOption({ label: "Initial payment" });
+    await k.page.getByLabel("Stage", { exact: true }).selectOption({ label: "Initial invoice and payment" });
     await k.page.getByRole("button", { name: "Save progress" }).click();
-    await expect(k.page.getByRole("status").filter({ hasText: "Application moved to Initial payment." })).toBeVisible();
+    await expect(k.page.getByRole("status").filter({ hasText: "Application moved to Initial invoice and payment." })).toBeVisible();
 
     const c = await as(browser, "client@firstflight.test");
     await c.page.goto(clientUrl);
@@ -97,8 +97,8 @@ test.describe.serial("phase 2: staff workflows", () => {
     const f = await as(browser, "finance@firstflight.test");
     await f.page.goto(staffUrl);
     await f.page.getByLabel("What it is for").fill("Instalment 1 of 2: processing fee");
-    await f.page.getByLabel("Amount", { exact: true }).fill("300");
-    await f.page.getByLabel("Currency").selectOption("USD");
+    await f.page.locator("form", { has: f.page.getByLabel("What it is for") }).getByLabel("Amount", { exact: true }).fill("300");
+    await f.page.locator("form", { has: f.page.getByLabel("What it is for") }).getByLabel("Currency").selectOption("USD");
     await f.page.getByRole("button", { name: "Issue invoice", exact: true }).click();
     await expect(f.page.getByRole("status").filter({ hasText: /Invoice INV-\d{4}-\d{4} issued/ })).toBeVisible();
     await f.page.reload();

@@ -9,7 +9,7 @@ import { canWorkOnCase } from "@/lib/permissions";
 import { logActivity, notify } from "@/lib/activity";
 import { emailUser } from "@/lib/email";
 import { getOffice } from "@/lib/settings";
-import { STAGES, STAGE_LABEL, kigaliTime } from "@/lib/format";
+import { SERVICE_LABEL, STAGES, STAGE_LABEL, kigaliTime } from "@/lib/format";
 import { kigaliToDate, type OfficeSnap } from "@/lib/appointments";
 
 type St = { ok?: string; error?: string } | undefined;
@@ -37,7 +37,9 @@ export async function inviteToOffice(_: St, fd: FormData): Promise<St> {
     await logActivity(tx, { actorId: user.id, action: "appointment.invited", entityType: "appointment", entityId: a.id, applicationId: app.id, summary: `${user.name} invited the client of ${app.reference} to the office on ${kigaliTime(at)}` });
     await notify(tx, { userId: app.clientId, title: "Invitation to the FIRST FLIGHT office", body: `${kigaliTime(at)}: ${reason}`, link: `/portal/applications/${app.id}#appointments` });
   });
-  await emailUser(app.clientId, `Office appointment for ${app.reference}`, `Your consultant invites you to the FIRST FLIGHT office.\n\nWhen: ${kigaliTime(at)}\nWhy: ${reason}\nWhere: ${office.address}\nMap: ${office.mapsUrl}\nPhone: ${office.phone}${expectedStage ? `\n\nAfter this visit your application should move to: ${STAGE_LABEL[expectedStage]}.` : ""}\n\nPlease accept${remoteAllowed ? ", choose to continue remotely," : ""} or decline in your client portal.`, `/portal/applications/${app.id}#appointments`);
+  const [client] = await db.select({ name: s.users.name }).from(s.users).where(eq(s.users.id, app.clientId));
+  const [k] = await db.select({ name: s.users.name, email: s.users.email, phone: s.users.phone }).from(s.users).where(eq(s.users.id, app.consultantId));
+  await emailUser(app.clientId, `Office appointment for ${app.reference}`, `Dear ${client?.name ?? "client"},\n\nYour consultant invites you to the FIRST FLIGHT office.\n\nApplication: ${app.reference} (${SERVICE_LABEL[app.service]})\nCurrent stage: ${STAGE_LABEL[app.stage]}\nWhy: ${reason}\nWhen: ${kigaliTime(at)}${expectedStage ? `\nNext stage after the visit: ${STAGE_LABEL[expectedStage]}` : ""}\n\nWhere: ${office.address}\nMap: ${office.mapsUrl}\nOffice: ${office.phone} · ${office.hours}\n\nYour consultant: ${k?.name ?? ""}${k?.phone ? ` · ${k.phone}` : ""}${k?.email ? ` · ${k.email}` : ""}\n\nPlease accept${remoteAllowed ? ", or choose to continue remotely if you can't come," : ""} in your client portal.`, `/portal/applications/${app.id}#appointments`);
   refresh(app.id);
   return { ok: "Invitation sent. The client has been notified." };
 }

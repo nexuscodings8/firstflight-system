@@ -1,7 +1,8 @@
 "use server";
-// Client assignment: consultants request unassigned clients; admins approve, reject, assign directly, reassign or unassign.
+// Client assignment: consultants assign available clients to themselves; only admins assign others, reassign or
+// unassign. (Requests made before self-assignment existed can still be approved or rejected by an admin.)
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db, schema as s } from "@/db";
 import { requireUser } from "@/lib/auth";
 import { hasService } from "@/lib/permissions";
@@ -13,32 +14,34 @@ export type AsgState = { ok?: string; error?: string } | undefined;
 const str = (fd: FormData, k: string, n = 500) => String(fd.get(k) ?? "").trim().slice(0, n);
 const refresh = (appId?: string) => { for (const p of ["/staff/available", "/staff/assignments", "/staff/applications", "/staff"]) revalidatePath(p); if (appId) revalidatePath(`/staff/applications/${appId}`); };
 
-export async function requestToServe(_: AsgState, fd: FormData): Promise<AsgState> {
+/**
+ * A consultant takes an unassigned client directly, with no admin approval. The application row is locked, so if
+ * two consultants click at once only the first succeeds; the second is told it's already taken. Once assigned,
+ * only an admin can change or remove the consultant.
+ */
+export async function assignToMyself(_: AsgState, fd: FormData): Promise<AsgState> {
   const me = await requireUser(["CONSULTANT"]);
-  const app = await db.query.applications.findFirst({ where: eq(s.applications.id, str(fd, "applicationId", 64)) });
-  if (!app || app.status !== "ACTIVE") return { error: "This application is no longer open." };
-  if (!hasService(me, app.service)) return { error: `You're not authorised for ${SERVICE_LABEL[app.service]}. Ask an administrator for access.` };
-  if (app.consultantId) return { error: "This client already has a consultant." };
-  const mine = await db.query.assignmentRequests.findFirst({ where: and(eq(s.assignmentRequests.applicationId, app.id), eq(s.assignmentRequests.consultantId, me.id), eq(s.assignmentRequests.status, "PENDING")) });
-  if (mine) return { error: "You already asked to serve this client. Your request is waiting for an administrator." };
-  await db.transaction(async (tx) => {
-    const [r] = await tx.insert(s.assignmentRequests).values({ applicationId: app.id, consultantId: me.id, note: str(fd, "note") || null }).returning();
-    await logActivity(tx, { actorId: me.id, action: "assignment.requested", entityType: "assignment_request", entityId: r.id, applicationId: app.id, summary: `${me.name} asked to serve ${app.reference}` });
-    await notify(tx, { role: "ADMIN", title: "Request to serve a client", body: `${me.name} asked to serve ${app.reference}.`, link: "/staff/assignments" });
+  const id = str(fd, "applicationId", 64);
+  const res = await db.transaction(async (tx) => {
+    const app = await lockApp(tx, id);
+    if (!app || app.status !== "ACTIVE") return { error: "This application is no longer open." };
+    if (!hasService(me, app.service)) return { error: `You're not authorised for ${SERVICE_LABEL[app.service]}. Ask an administrator for access.` };
+    if (app.consultantId) {
+      const [k] = await tx.select({ name: s.users.name }).from(s.users).where(eq(s.users.id, app.consultantId));
+      if (app.consultantId === me.id) return { error: "This client is already assigned to you." };
+      await notify(tx, { userId: me.id, title: "Client already assigned", body: `${app.reference} was just assigned to ${k?.name ?? "another consultant"}.`, link: "/staff/available" });
+      return { error: `Too late: ${app.reference} has already been assigned to ${k?.name ?? "another consultant"}.` };
+    }
+    await assignInTx(tx, app, me, me, "SELF_ASSIGNED");
+    return { ok: `${app.reference} is now assigned to you. It's in My applications.`, app };
   });
-  refresh();
-  return { ok: "Request sent. An administrator will approve or reject it." };
+  if (!("app" in res)) return res; // nothing changed: keep the page as it is, so the message stays in view
+  if (res.app) await afterAssign(res.app, me);
+  refresh(id);
+  return { ok: res.ok };
 }
 
-export async function withdrawRequest(_: AsgState, fd: FormData): Promise<AsgState> {
-  const me = await requireUser(["CONSULTANT"]);
-  const r = await db.query.assignmentRequests.findFirst({ where: and(eq(s.assignmentRequests.id, str(fd, "requestId", 64)), eq(s.assignmentRequests.consultantId, me.id), eq(s.assignmentRequests.status, "PENDING")) });
-  if (!r) return { error: "This request is no longer pending." };
-  await db.update(s.assignmentRequests).set({ status: "WITHDRAWN", decidedAt: new Date() }).where(eq(s.assignmentRequests.id, r.id));
-  refresh();
-  return { ok: "Request withdrawn." };
-}
-
+/** Requests made before self-assignment existed can still be approved or rejected by an admin. */
 export async function decideRequest(_: AsgState, fd: FormData): Promise<AsgState> {
   const admin = await requireUser(["ADMIN"]);
   const req = await db.query.assignmentRequests.findFirst({ where: eq(s.assignmentRequests.id, str(fd, "requestId", 64)), with: { consultant: { columns: { id: true, name: true } } } });

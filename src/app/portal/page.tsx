@@ -1,3 +1,4 @@
+import { stepFacts } from "@/lib/applications";
 import Link from "next/link";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { db, schema as s } from "@/db";
@@ -23,7 +24,7 @@ export default async function Portal() {
   const unread = (await db.select({ id: s.notifications.id }).from(s.notifications).where(and(eq(s.notifications.userId, user.id), isNull(s.notifications.readAt)))).length;
   const t = totals(apps);
   const main = apps.find((a) => a.status === "ACTIVE") ?? apps[0];
-  const step = main ? nextStep(main, "client") : undefined;
+  const step = main ? nextStep({ ...main, ...stepFacts(main) }, "client") : undefined;
   return (
     <div className="grid gap-5">
       <h1 className="text-[clamp(26px,3vw,36px)]">Hello, {user.name.split(" ")[0]}</h1>

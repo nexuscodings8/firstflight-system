@@ -15,6 +15,7 @@ export async function AssignmentPanel({ app, admin }: { app: { id: string; servi
   return (
     <section id="assignment" className="card p-6" aria-labelledby="as-h">
       <h2 id="as-h" className="text-xl">Assignment</h2>
+      {!admin && <p className="mt-1 text-sm muted">You&apos;re responsible for this client. Only an administrator can reassign or remove the assignment.</p>}
       {admin && app.status === "ACTIVE" && (
         <div className="mt-3 grid gap-4">
           {pending.map((r) => (

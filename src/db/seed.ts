@@ -20,7 +20,7 @@ async function main() {
     jobs, job_categories, countries, continents, promotions, portfolio_entries, testimonials, news_posts, whatsapp_contacts,
     counters, email_log, refund_requests, amendment_requests, fee_rules, sessions, consultant_services, assignment_requests,
     assignment_history, account_tokens, settings, contract_templates, contracts, appointments, payment_submissions,
-    messages, conversation_members, conversations, users restart identity cascade`);
+    messages, conversation_members, conversations, case_files, historical_payments, loan_requests, users restart identity cascade`);
 
   // ---------- people ----------
   const hash = await bcrypt.hash(pw, 12);

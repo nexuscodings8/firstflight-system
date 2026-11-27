@@ -11,16 +11,17 @@ type App = { id: string; reference: string; clientId: string; consultantId: stri
  * Makes `consultant` the application's one primary consultant. Records history, closes other pending requests,
  * notifies the consultant, the previous consultant and the client. Call inside a transaction.
  */
-export async function assignInTx(tx: Tx, app: App, consultant: { id: string; name: string }, by: { id: string; name: string }, kind: "ASSIGNED" | "REASSIGNED" | "REQUEST_APPROVED", reason?: string | null) {
+export async function assignInTx(tx: Tx, app: App, consultant: { id: string; name: string }, by: { id: string; name: string }, kind: "ASSIGNED" | "REASSIGNED" | "REQUEST_APPROVED" | "SELF_ASSIGNED", reason?: string | null) {
   const nextStage = app.stage === "SUBMITTED" ? "ELIGIBILITY_REVIEW" : app.stage;
   await tx.update(s.applications).set({ consultantId: consultant.id, stage: nextStage as "ELIGIBILITY_REVIEW" }).where(eq(s.applications.id, app.id));
   await tx.insert(s.assignmentHistory).values({ applicationId: app.id, fromConsultantId: app.consultantId, toConsultantId: consultant.id, kind, reason: reason ?? null, changedById: by.id });
   await tx.update(s.assignmentRequests).set({ status: "REJECTED", note: `Assigned to ${consultant.name}`, decidedById: by.id, decidedAt: new Date() })
     .where(and(eq(s.assignmentRequests.applicationId, app.id), eq(s.assignmentRequests.status, "PENDING"), ne(s.assignmentRequests.consultantId, consultant.id)));
-  await logActivity(tx, { actorId: by.id, action: kind === "REQUEST_APPROVED" ? "assignment.request_approved" : app.consultantId ? "application.reassigned" : "application.assigned", entityType: "application", entityId: app.id, applicationId: app.id,
-    summary: kind === "REQUEST_APPROVED" ? `${by.name} approved ${consultant.name}'s request to serve ${app.reference}` : `${by.name} ${app.consultantId ? "reassigned" : "assigned"} ${app.reference} to ${consultant.name}${reason ? `: ${reason}` : ""}`,
+  await logActivity(tx, { actorId: by.id, action: kind === "SELF_ASSIGNED" ? "application.self_assigned" : kind === "REQUEST_APPROVED" ? "assignment.request_approved" : app.consultantId ? "application.reassigned" : "application.assigned", entityType: "application", entityId: app.id, applicationId: app.id,
+    summary: kind === "SELF_ASSIGNED" ? `${consultant.name} assigned ${app.reference} to themselves` : kind === "REQUEST_APPROVED" ? `${by.name} approved ${consultant.name}'s request to serve ${app.reference}` : `${by.name} ${app.consultantId ? "reassigned" : "assigned"} ${app.reference} to ${consultant.name}${reason ? `: ${reason}` : ""}`,
     changes: { consultant: [app.consultantId, consultant.id], stage: [app.stage, nextStage] } });
-  await notify(tx, { userId: consultant.id, title: kind === "REQUEST_APPROVED" ? "Request approved: client assigned to you" : "Application assigned to you", body: app.reference, link: `/staff/applications/${app.id}` });
+  if (kind === "SELF_ASSIGNED") await notify(tx, { role: "ADMIN", title: "Client self-assigned", body: `${consultant.name} assigned ${app.reference} to themselves.`, link: `/staff/assignments?tab=history` });
+  await notify(tx, { userId: consultant.id, title: kind === "SELF_ASSIGNED" ? "You're now responsible for this client" : kind === "REQUEST_APPROVED" ? "Request approved: client assigned to you" : "Application assigned to you", body: app.reference, link: `/staff/applications/${app.id}` });
   if (app.consultantId && app.consultantId !== consultant.id) await notify(tx, { userId: app.consultantId, title: "Application reassigned", body: `${app.reference} is now handled by ${consultant.name}.`, link: "/staff/applications" });
   await notify(tx, { userId: app.clientId, title: "Your consultant", body: `${consultant.name} is now handling ${app.reference}.`, link: `/portal/applications/${app.id}` });
 }

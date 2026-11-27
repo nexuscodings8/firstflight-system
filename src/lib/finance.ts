@@ -42,7 +42,7 @@ export function monthRange(ym: string): [Date, Date] | null {
   return [start, end];
 }
 
-export const PAYMENT_METHOD_LABEL: Record<string, string> = { CASH: "Cash", BANK_TRANSFER: "Bank transfer", MOBILE_MONEY: "Mobile money", CARD: "Card" };
+export const PAYMENT_METHOD_LABEL: Record<string, string> = { CASH: "Cash", BANK_TRANSFER: "Bank transfer", MOBILE_MONEY: "Mobile money", CARD: "Card", LOAN: "Approved loan" };
 
 /** Current month in Kigali time, as "YYYY-MM". */
 export const currentMonth = (now = Date.now()) => new Date(now + 2 * 3_600_000).toISOString().slice(0, 7);
