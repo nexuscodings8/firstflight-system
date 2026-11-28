@@ -147,7 +147,7 @@ export async function createClientAccount(_: ClientState, fd: FormData): Promise
   if (sel) {
     const h = history;
     const r = await createApplication({ client, sel, note: d.note ?? null, actor: me, via: "staff", assignTo, afterCreate: h ? async (tx, a) => {
-      await tx.update(s.applications).set({ stage: h.stage, status: h.stage === "COMPLETED" ? "COMPLETED" : "ACTIVE", origin: "EXISTING", originalStartDate: h.started, importedStageReachedAt: h.reached, importNote: d.note ?? null }).where(eq(s.applications.id, a.id));
+      await tx.update(s.applications).set({ stage: h.stage, status: h.stage === "COMPLETED" ? "COMPLETED" : "ACTIVE", completedAt: h.stage === "COMPLETED" ? h.reached ?? new Date() : null, origin: "EXISTING", originalStartDate: h.started, importedStageReachedAt: h.reached, importNote: d.note ?? null }).where(eq(s.applications.id, a.id));
       for (const f of h.files) await tx.insert(s.caseFiles).values({ applicationId: a.id, kind: f.kind, title: f.title, issuedOn: f.issuedOn, historical: true, storageKey: f.file.key, fileName: f.file.name, mimeType: f.file.mime, uploadedById: me.id });
       if (h.contract) await tx.insert(s.contracts).values({ applicationId: a.id, kind: "CONTRACT", method: "UPLOADED", title: "Service contract (signed before the platform)", signedAt: h.contract.signedAt, storageKey: h.contract.file.key, fileName: h.contract.file.name, mimeType: h.contract.file.mime, uploadedById: me.id });
       for (const pm of h.payments) {

@@ -8,7 +8,7 @@ import { date, dateTime } from "@/lib/format";
 import { ActionForm } from "./action-form";
 import { AmendmentsSection } from "./amendments-section";
 
-export function ContractPanel({ app, mode, canWork = false, role, seeMoney = mode === "client" }: { app: FullApplication; mode: "client" | "staff"; canWork?: boolean; role?: string; seeMoney?: boolean }) {
+export function ContractPanel({ app, mode, canWork = false, role, seeMoney = mode === "client", notices }: { app: FullApplication; mode: "client" | "staff"; canWork?: boolean; role?: string; seeMoney?: boolean; notices?: React.ReactNode }) {
   const plan = app.feePlan as FeePlan | null;
   const { firstPaid } = paymentFacts(app.invoices, plan?.installments[0]?.invoiceId ?? null);
   const signed = app.contracts.filter((c) => c.kind === "CONTRACT");
@@ -17,6 +17,7 @@ export function ContractPanel({ app, mode, canWork = false, role, seeMoney = mod
   return (
     <section id="contract" className="card p-6" aria-labelledby="ct-h">
       <h2 id="ct-h" className="text-xl">Service contract</h2>
+      {notices}
       {signed.length === 0 && (
         !firstPaid ? (
           <p className="mt-2 text-sm muted">{mode === "client" ? "Your contract unlocks as soon as Finance approves your first instalment." : "Locked until Finance approves the first instalment."}</p>

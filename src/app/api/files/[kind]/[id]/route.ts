@@ -44,6 +44,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ kind: string; i
     const f = await db.query.caseFiles.findFirst({ where: eq(s.caseFiles.id, id), with: { application: appCols } });
     if (!f || !canViewApplication(user, f.application)) return nf;
     if (f.kind === "PAYMENT_EVIDENCE" && user.role !== "FINANCE" && user.role !== "ADMIN") return nf;
+    if (f.kind === "FINAL_DOC" && user.role === "CLIENT" && f.status === "UPLOADED") return nf; // not shared yet
     return fileResponse(f.storageKey, f.fileName, f.mimeType, inline);
   }
   if (kind === "loan") {

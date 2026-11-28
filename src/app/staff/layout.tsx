@@ -20,6 +20,7 @@ async function sections(user: CurrentUser): Promise<NavItem[]> {
   const notes: NavItem = { href: "/staff/notifications", label: "Notifications", icon: "bell", count: unread };
   const msgs: NavItem = { href: "/staff/messages", label: "Messages", icon: "msg", count: await unreadTotal(user) };
   const pendingPay = () => n(db.select({ n: count() }).from(s.paymentSubmissions).where(eq(s.paymentSubmissions.status, "PENDING")));
+  const remoteFinal = (consultantId?: string) => n(db.select({ n: count() }).from(s.applications).where(and(eq(s.applications.stage, "FINAL_COLLECTION"), eq(s.applications.status, "ACTIVE"), eq(s.applications.finalCollectionMode, "REMOTE"), ...(consultantId ? [eq(s.applications.consultantId, consultantId)] : []))));
   const pendingLoans = () => n(db.select({ n: count() }).from(s.loanRequests).where(eq(s.loanRequests.status, "PENDING_REVIEW")));
   if (user.role === "CONSULTANT") {
     const mine = and(eq(s.applications.consultantId, user.id), eq(s.applications.status, "ACTIVE"));
@@ -40,6 +41,7 @@ async function sections(user: CurrentUser): Promise<NavItem[]> {
       { href: "/staff/available", label: "Available clients", icon: "users", count: avail },
       { href: "/staff/clients/new", label: "Register a client", icon: "plus" },
       { href: "/staff/clients/new?existing=1", label: "Register existing client", icon: "upload" },
+      { href: "/staff/final-collection", label: "Final collection uploads", icon: "upload", count: await remoteFinal(user.id) },
       { href: "/staff/refunds", label: "Refund reviews", icon: "refund", count: refundsToReview },
       { href: "/staff/enquiries", label: "Enquiries", icon: "msg", count: enq },
       msgs,
@@ -62,7 +64,7 @@ async function sections(user: CurrentUser): Promise<NavItem[]> {
       { href: "/staff/finance", label: "Balances due", icon: "wallet", count: unpaid },
       { href: "/staff/finance?show=all", label: "All invoices", icon: "receipt" },
       { href: "/staff/finance/fees", label: "Service fees", icon: "tag" },
-      { href: "/staff/refunds", label: "Refunds", icon: "refund", count: refunds },
+    { href: "/staff/refunds", label: "Refunds", icon: "refund", count: refunds },
       { href: "/staff/amendments", label: "Amendments", icon: "amend", count: amendFin },
       { href: "/staff/finance/report", label: "Monthly reports", icon: "chart" },
       { href: "/staff/settings?tab=refunds", label: "Refund rules", icon: "key" },
@@ -111,6 +113,7 @@ async function sections(user: CurrentUser): Promise<NavItem[]> {
     { href: "/staff/finance/loans", label: "Loan requests", icon: "key", count: await pendingLoans() },
     { href: "/staff/finance", label: "Invoices", icon: "receipt" },
     { href: "/staff/finance/fees", label: "Service fees", icon: "tag" },
+    { href: "/staff/final-collection", label: "Final collection uploads", icon: "upload", count: await remoteFinal() },
     { href: "/staff/refunds", label: "Refunds", icon: "refund", count: refunds },
     { href: "/staff/amendments", label: "Amendments", icon: "amend", count: amendAdmin },
     { href: "/staff/finance/report", label: "Monthly reports", icon: "chart" },

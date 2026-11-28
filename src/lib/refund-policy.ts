@@ -16,3 +16,33 @@ export function refundEligibility(policy: Policy, firstPaymentAt: Date | null, n
   if (closesOn && +now >= +closesOn) return { state: "CLOSED", opensOn, closesOn, text: `The refund period for this service ended on ${fmt(closesOn)}. Contact your consultant if you think an exception applies.` };
   return { state: "OPEN", opensOn, closesOn, text: closesOn ? `You can request a refund until ${fmt(closesOn)}.` : "You can request a refund at any time under this service's policy." };
 }
+
+// ---------- after the application is completed ----------
+// Refund and reapplication are shown as soon as an application is completed, each disabled until its own
+// eligibility date (the completion date plus that option's waiting period).
+export type OptionKind = "REFUND" | "REAPPLICATION";
+export type Waiting = { state: "WAITING" | "AVAILABLE"; opensOn: Date; daysLeft: number; text: string };
+const DAY = 86_400_000;
+
+export function afterCompletion(completedAt: Date, waitDays: number, now = new Date()): Waiting {
+  const opensOn = new Date(+completedAt + waitDays * DAY);
+  if (+now >= +opensOn) return { state: "AVAILABLE", opensOn, daysLeft: 0, text: `Available since ${fmt(opensOn)}.` };
+  const daysLeft = Math.ceil((+opensOn - +now) / DAY);
+  return { state: "WAITING", opensOn, daysLeft, text: `Available on ${fmt(opensOn)}. You can submit this request in ${daysLeft} day${daysLeft === 1 ? "" : "s"}.` };
+}
+
+export type OptionStatus = "WAITING" | "AVAILABLE" | "SUBMITTED" | "UNDER_REVIEW" | "APPROVED" | "REJECTED" | "BLOCKED";
+export const OPTION_LABEL: Record<OptionStatus, string> = { WAITING: "Waiting period", AVAILABLE: "Available", SUBMITTED: "Submitted", UNDER_REVIEW: "Under review", APPROVED: "Approved", REJECTED: "Rejected", BLOCKED: "Another request is in progress" };
+
+/** Where one option stands: its own latest request since completion decides, otherwise the waiting period. */
+export function optionStatus(kind: OptionKind, completedAt: Date, w: Waiting, requests: { kind: string; state: string; createdAt: Date }[]): { status: OptionStatus; canSubmit: boolean } {
+  const mine = requests.filter((r) => r.kind === kind && +r.createdAt >= +completedAt).sort((a, b) => +b.createdAt - +a.createdAt)[0];
+  const otherOpen = requests.some((r) => r.kind !== kind && ["SUBMITTED", "FINANCE_REVIEW", "ADMIN_APPROVAL", "APPROVED", "PROCESSING"].includes(r.state));
+  if (mine?.state === "SUBMITTED") return { status: "SUBMITTED", canSubmit: false };
+  if (mine && ["FINANCE_REVIEW", "ADMIN_APPROVAL", "PROCESSING"].includes(mine.state)) return { status: "UNDER_REVIEW", canSubmit: false };
+  if (mine && (mine.state === "APPROVED" || mine.state === "COMPLETED")) return { status: "APPROVED", canSubmit: false };
+  if (w.state === "WAITING") return { status: "WAITING", canSubmit: false };
+  if (otherOpen) return { status: "BLOCKED", canSubmit: false };
+  if (mine?.state === "REJECTED") return { status: "REJECTED", canSubmit: true };
+  return { status: "AVAILABLE", canSubmit: true };
+}

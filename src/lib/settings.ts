@@ -4,7 +4,11 @@ import { db, schema as s } from "@/db";
 import { COMPANY } from "./company";
 
 export type Office = { address: string; mapsUrl: string; phone: string; hours: string; confirmed: boolean };
-export type RefundPolicy = { eligibleAfterDays: number; windowDays: number; allowReapplication: boolean; terms: string };
+/**
+ * eligibleAfterDays/windowDays apply while an application is in progress (from the first approved payment).
+ * After completion, refund and reapplication each open after their own waiting period from the completion date.
+ */
+export type RefundPolicy = { eligibleAfterDays: number; windowDays: number; allowReapplication: boolean; terms: string; refundAfterCompletionDays: number; reapplyAfterCompletionDays: number };
 export const SERVICES = ["WORK", "STUDY", "VISA"] as const;
 export const ALL_SERVICES = ["WORK", "STUDY", "VISA", "FLIGHT"] as const;
 export type Service = (typeof SERVICES)[number];
@@ -15,7 +19,7 @@ const DEFAULT_OFFICE: Office = {
   phone: COMPANY.phones[0], hours: "Monday to Friday, 8:00 to 17:00", confirmed: false,
 };
 // Until Finance/Admin set them, refunds open straight after the first payment and stay open for 90 days.
-const DEFAULT_POLICY: RefundPolicy = { eligibleAfterDays: 0, windowDays: 90, allowReapplication: true, terms: "Refunds follow the terms of your signed service contract." };
+const DEFAULT_POLICY: RefundPolicy = { eligibleAfterDays: 0, windowDays: 90, allowReapplication: true, terms: "Refunds follow the terms of your signed service contract.", refundAfterCompletionDays: 30, reapplyAfterCompletionDays: 15 };
 
 async function read<T>(key: string, fallback: T): Promise<T> {
   const row = await db.query.settings.findFirst({ where: eq(s.settings.key, key) });

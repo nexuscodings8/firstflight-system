@@ -88,10 +88,12 @@ export async function updateProgress(_: CaseState, fd: FormData): Promise<CaseSt
     await tx.select({ id: s.applications.id }).from(s.applications).where(eq(s.applications.id, app.id)).for("update");
     const forward = status === "COMPLETED" || STAGES.indexOf(finalStage) > STAGES.indexOf(app.stage as (typeof STAGES)[number]);
     if (forward) { const why = stageBlock(finalStage, status === "COMPLETED", (await factsFor(tx, app.id)).gate); if (why) return why; }
-    await tx.update(s.applications).set({ stage: finalStage, status }).where(eq(s.applications.id, app.id));
+    // The completion date starts the refund and reapplication waiting periods; only completing (or reopening) changes it.
+    const completing = status === "COMPLETED" && app.status !== "COMPLETED", reopening = app.status === "COMPLETED" && status !== "COMPLETED";
+    await tx.update(s.applications).set({ stage: finalStage, status, ...(completing ? { completedAt: new Date() } : reopening ? { completedAt: null } : {}) }).where(eq(s.applications.id, app.id));
     if (message) await tx.insert(s.applicationUpdates).values({ applicationId: app.id, authorId: user.id, body: message, visibility: "CLIENT" });
     await logActivity(tx, { actorId: user.id, action: "application.progress", entityType: "application", entityId: app.id, applicationId: app.id,
-      summary: `${user.name} ${what}: ${app.reference}`, changes: { stage: [app.stage, finalStage], status: [app.status, status] } });
+      summary: `${user.name} ${what}: ${app.reference}`, changes: { stage: [app.stage, finalStage], status: [app.status, status], ...(completing ? { completedAt: [null, new Date().toISOString()] } : reopening ? { completedAt: [app.completedAt?.toISOString() ?? null, null] } : {}) } });
     await notify(tx, { userId: app.clientId, title: "Application updated", body: `${app.reference} ${what}.`, link: clientLink(app.id) });
     // A stage condition may now be met (instalment payable at this stage); invoice it, and only it.
     await activateDue(tx, app.id, user.id);
@@ -121,4 +123,26 @@ export async function postUpdate(_: CaseState, fd: FormData): Promise<CaseState>
   if (visibility === "CLIENT") await emailUser(app.clientId, `New update on ${app.reference}`, body, clientLink(app.id));
   refresh(app.id);
   return { ok: visibility === "INTERNAL" ? "Internal note saved. Only staff can see it." : "Update posted. The client has been notified." };
+}
+
+/** Admin corrects a completed application's completion date; refund and reapplication dates follow it. */
+export async function correctCompletionDate(_: CaseState, fd: FormData): Promise<CaseState> {
+  const user = await requireUser(["ADMIN"]);
+  const app = await db.query.applications.findFirst({ where: eq(s.applications.id, str(fd, "applicationId", 64)) });
+  if (!app) return { error: "Application not found." };
+  if (app.status !== "COMPLETED") return { error: "Only a completed application has a completion date." };
+  const raw = str(fd, "completedOn", 10), reason = str(fd, "reason", 300);
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(`${raw}T12:00:00+02:00`) : null;
+  if (!d || +d > Date.now() + 86_400_000) return { error: "Enter the real completion date (not in the future)." };
+  if (+d < +app.createdAt - 365 * 86_400_000 * 5) return { error: "That date is too far in the past." };
+  if (reason.length < 5) return { error: "Give the reason for the correction." };
+  await db.transaction(async (tx) => {
+    await tx.update(s.applications).set({ completedAt: d }).where(eq(s.applications.id, app.id));
+    await logActivity(tx, { actorId: user.id, action: "application.completion_date_corrected", entityType: "application", entityId: app.id, applicationId: app.id,
+      summary: `${user.name} corrected the completion date of ${app.reference} from ${app.completedAt?.toLocaleDateString("en-GB") ?? "not set"} to ${d.toLocaleDateString("en-GB")}: ${reason}. Refund and reapplication dates were recalculated.`,
+      changes: { completedAt: [app.completedAt?.toISOString() ?? null, d.toISOString()] } });
+    await notify(tx, { userId: app.clientId, title: "Refund and reapplication dates updated", body: `${app.reference}: the completion date was corrected to ${d.toLocaleDateString("en-GB")}, so the dates when you can request a refund or reapply changed.`, link: `/portal/applications/${app.id}#after-completion`, section: "refunds" });
+  });
+  refresh(app.id);
+  return { ok: "Completion date corrected; eligibility dates recalculated." };
 }

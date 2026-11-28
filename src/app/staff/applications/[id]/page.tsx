@@ -18,6 +18,12 @@ import { ContractPanel } from "@/components/contract-panel";
 import { AppointmentsPanel } from "@/components/appointments-panel";
 import { OfferPanel } from "@/components/offer-panel";
 import { HistoricalPanel } from "@/components/historical-panel";
+import { CompletionBox } from "@/components/completion-box";
+import { VisaPanel } from "@/components/visa-panel";
+import { FinalPanel } from "@/components/final-panel";
+import { SectionNotices } from "@/components/section-notices";
+import type { Section } from "@/lib/notice-sections";
+import { getRefundPolicy } from "@/lib/settings";
 import { getOffice } from "@/lib/settings";
 import { refundInfo } from "@/lib/refund-info";
 import { OPEN_STATES } from "@/lib/refunds";
@@ -43,6 +49,7 @@ export default async function StaffApplication({ params }: { params: Promise<{ i
   const rules = finance ? matchingRules(await db.select().from(s.feeRules), await scopeOf(app)) : [];
   const paper = work || finance ? await refundInfo(app) : null;
   const history = await db.query.activities.findMany({ where: eq(s.activities.applicationId, app.id), orderBy: [desc(s.activities.createdAt)], limit: 40, with: { actor: { columns: { name: true } } } });
+  const n = (sections: Section[]) => <SectionNotices user={user} sections={sections} applicationId={app.id} path={`/staff/applications/${app.id}`} />;
   return (
     <>
       <Link href="/staff/applications" className="mb-4 inline-flex text-sm font-semibold text-brand underline">← Back to list</Link>
@@ -57,16 +64,19 @@ export default async function StaffApplication({ params }: { params: Promise<{ i
         updatesFooter={work ? <div className="mt-5 border-t border-line pt-4"><h3 className="mb-2 text-base">Post an update or note</h3><UpdateForm applicationId={app.id} /></div> : undefined}
       >
         <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
-          <InvoicesPanel app={app} mode={finance ? "finance" : "summary"} rules={rules} />
+          <InvoicesPanel app={app} mode={finance ? "finance" : "summary"} rules={rules} notices={n(["payments"])} />
           {work && <section className="card p-6"><h2 className="mb-3 text-xl">Progress</h2><ProgressForm applicationId={app.id} stage={app.stage} status={app.status} /></section>}
         </div>
+        <CompletionBox app={app} policy={await getRefundPolicy(app.service)} admin={user.role === "ADMIN"} />
         <HistoricalPanel app={app} finance={finance || user.role === "ADMIN"} />
-        <OfferPanel app={app} mode="staff" canWork={work} />
+        {user.role !== "FINANCE" && <FinalPanel app={app} mode="staff" canWork={work} notices={n(["final"])} />}
+        {user.role !== "FINANCE" && <VisaPanel app={app} mode="staff" canWork={work} notices={n(["visa"])} />}
+        <OfferPanel app={app} mode="staff" canWork={work} notices={n(["offer"])} />
         <div className="grid gap-6 lg:grid-cols-2">
-          <ContractPanel app={app} mode="staff" canWork={work} role={user.role} seeMoney={finance || user.role === "ADMIN"} />
-          {user.role !== "FINANCE" && <AppointmentsPanel app={app} mode="staff" canWork={work} office={work ? await getOffice() : undefined} />}
+          <ContractPanel app={app} mode="staff" canWork={work} role={user.role} seeMoney={finance || user.role === "ADMIN"} notices={n(["contracts"])} />
+          {user.role !== "FINANCE" && <AppointmentsPanel app={app} mode="staff" canWork={work} office={work ? await getOffice() : undefined} notices={n(["appointments"])} />}
         </div>
-        <RequestsPanel app={app} mode="staff" canDecide={work} seeRefunds={finance} />
+        <RequestsPanel app={app} mode="staff" canDecide={work} seeRefunds={finance} notices={n(["refunds", "reapplication"])} />
         {(work || finance) && paper && (paper.refundOpen || paper.allowReapplication) && !app.refunds.some((r) => OPEN_STATES.includes(r.state)) && (
           <details className="card p-6">
             <summary className="cursor-pointer text-lg font-semibold text-brand">Record a paper refund or reapplication form</summary>

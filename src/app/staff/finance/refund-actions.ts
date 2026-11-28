@@ -47,7 +47,7 @@ export async function consultantReview(_: DecState, fd: FormData): Promise<DecSt
   if (note.length < 5) return { error: "Add a short note for Finance and the administrator." };
   const ok = await step(r, ["SUBMITTED"], { state: "FINANCE_REVIEW", consultantNote: `${rec === "support" ? "Supports" : "Does not support"}: ${note}`, consultantReviewedById: user.id },
     { actorId: user.id, action: "refund.consultant_reviewed", summary: `${user.name} reviewed ${r.reference} (${rec === "support" ? "supports" : "does not support"}) and sent it to Finance` },
-    async (tx) => { await notify(tx, { role: "FINANCE", title: `${what(r)[0].toUpperCase() + what(r).slice(1)} request to review`, body: `${r.reference} (${r.application.reference})`, link: "/staff/refunds" }); await notify(tx, { userId: r.clientId, title: "Your request moved to Finance review", body: r.reference, link: "/portal/refunds" }); });
+    async (tx) => { await notify(tx, { role: "FINANCE", title: `${what(r)[0].toUpperCase() + what(r).slice(1)} request to review`, body: `${r.reference} (${r.application.reference})`, link: "/staff/refunds", section: r.kind === "REAPPLICATION" ? "reapplication" : "refunds", applicationId: r.applicationId }); await notify(tx, { userId: r.clientId, title: "Your request moved to Finance review", body: r.reference, link: "/portal/refunds", section: r.kind === "REAPPLICATION" ? "reapplication" : "refunds", applicationId: r.applicationId }); });
   if (!ok) return { error: moved };
   refresh(r.applicationId);
   return { ok: `${r.reference} sent to Finance.` };
@@ -70,7 +70,7 @@ export async function financeReview(_: DecState, fd: FormData): Promise<DecState
   }
   const ok = await step(r, ["FINANCE_REVIEW"], { state: "ADMIN_APPROVAL", financeNote: note, amountApproved, financeReviewedById: user.id },
     { actorId: user.id, action: "refund.finance_reviewed", summary: `${user.name} completed the Finance review of ${r.reference}${amountApproved ? ` (recommends ${money(amountApproved, r.currency ?? "USD")})` : ""}` },
-    async (tx) => { await notify(tx, { role: "ADMIN", title: "Request waiting for your approval", body: `${r.reference} (${r.application.reference})`, link: "/staff/refunds" }); await notify(tx, { userId: r.clientId, title: "Your request is waiting for final approval", body: r.reference, link: "/portal/refunds" }); });
+    async (tx) => { await notify(tx, { role: "ADMIN", title: "Request waiting for your approval", body: `${r.reference} (${r.application.reference})`, link: "/staff/refunds", section: r.kind === "REAPPLICATION" ? "reapplication" : "refunds", applicationId: r.applicationId }); await notify(tx, { userId: r.clientId, title: "Your request is waiting for final approval", body: r.reference, link: "/portal/refunds", section: r.kind === "REAPPLICATION" ? "reapplication" : "refunds", applicationId: r.applicationId }); });
   if (!ok) return { error: moved };
   refresh(r.applicationId);
   return { ok: `${r.reference} sent for admin approval.` };
@@ -86,18 +86,19 @@ export async function adminDecision(_: DecState, fd: FormData): Promise<DecState
   if (note.length < 5) return { error: approve ? "Add a note for the client." : "Tell the client why the request is rejected." };
   const mode = str(fd, "reapplyMode", 10);
   if (approve && r.kind === "REAPPLICATION" && mode !== "CONTINUE" && mode !== "NEW") return { error: "Choose how the client reapplies." };
+  if (approve && r.kind === "REAPPLICATION" && mode === "CONTINUE" && r.application.status === "COMPLETED") return { error: "This application is completed: approve a new application instead, so its history stays as it is." };
   if (approve && r.kind === "REFUND" && Number(r.amountApproved ?? 0) <= 0) return { error: "Finance recommended no refund. Reject the request, or send it back to Finance." };
   const state = !approve ? "REJECTED" : r.kind === "REAPPLICATION" ? "COMPLETED" : "APPROVED";
   const ok = await step(r, ["ADMIN_APPROVAL"], { state, status: approve ? (r.kind === "REAPPLICATION" ? "PAID" : "FORM_SUBMITTED") : "DECLINED", adminNote: note, decisionNote: note, adminDecidedById: user.id, decidedById: user.id, reapplyMode: approve && r.kind === "REAPPLICATION" ? mode : null },
     { actorId: user.id, action: approve ? "refund.approved" : "refund.rejected", summary: `${user.name} ${approve ? "approved" : "rejected"} ${what(r)} request ${r.reference}${approve && r.kind === "REAPPLICATION" ? ` (${mode === "CONTINUE" ? "continue the same application" : "start a new application"})` : ""}` },
     async (tx) => {
       if (approve && r.kind === "REAPPLICATION") {
-        const status = mode === "CONTINUE" ? "ACTIVE" : "WITHDRAWN";
-        await tx.update(s.applications).set({ status }).where(eq(s.applications.id, r.applicationId));
+        // A completed application stays completed (its history is kept); the client may then start a new one.
+        if (r.application.status !== "COMPLETED") await tx.update(s.applications).set({ status: mode === "CONTINUE" ? "ACTIVE" : "WITHDRAWN" }).where(eq(s.applications.id, r.applicationId));
         await tx.insert(s.applicationUpdates).values({ applicationId: r.applicationId, authorId: user.id, visibility: "CLIENT", body: mode === "CONTINUE" ? `Your reapplication was approved: this application continues. ${note}` : `Your reapplication was approved: this application is closed and you can start a new one. Payments already made stay on record. ${note}` });
       }
-      if (approve && r.kind === "REFUND") await notify(tx, { role: "FINANCE", title: "Refund approved: process the payment", body: `${r.reference}: ${money(r.amountApproved, r.currency ?? "USD")}`, link: "/staff/refunds" });
-      await notify(tx, { userId: r.clientId, title: approve ? `${what(r)[0].toUpperCase() + what(r).slice(1)} approved` : "Request rejected", body: `${r.reference}: ${note.slice(0, 140)}`, link: "/portal/refunds" });
+      if (approve && r.kind === "REFUND") await notify(tx, { role: "FINANCE", title: "Refund approved: process the payment", body: `${r.reference}: ${money(r.amountApproved, r.currency ?? "USD")}`, link: "/staff/refunds", section: "refunds", applicationId: r.applicationId });
+      await notify(tx, { userId: r.clientId, title: approve ? `${what(r)[0].toUpperCase() + what(r).slice(1)} approved` : "Request rejected", body: `${r.reference}: ${note.slice(0, 140)}`, link: "/portal/refunds", section: r.kind === "REAPPLICATION" ? "reapplication" : "refunds", applicationId: r.applicationId });
     });
   if (!ok) return { error: moved };
   await emailUser(r.clientId, `${r.reference}: ${approve ? "approved" : "rejected"}`, `Your ${what(r)} request ${r.reference} was ${approve ? "approved" : "rejected"}.\n\n${note}${approve && r.kind === "REAPPLICATION" && mode === "NEW" ? "\n\nYou can now start a new application from the website." : ""}`, "/portal/refunds");
@@ -112,7 +113,7 @@ export async function startRefundPayment(_: DecState, fd: FormData): Promise<Dec
   if (!r || r.kind !== "REFUND") return { error: "Refund not found." };
   const ok = await step(r, ["APPROVED"], { state: "PROCESSING", processedById: user.id },
     { actorId: user.id, action: "refund.processing", summary: `${user.name} started processing refund ${r.reference}` },
-    async (tx) => { await notify(tx, { userId: r.clientId, title: "Your refund is being paid", body: r.reference, link: "/portal/refunds" }); });
+    async (tx) => { await notify(tx, { userId: r.clientId, title: "Your refund is being paid", body: r.reference, link: "/portal/refunds", section: r.kind === "REAPPLICATION" ? "reapplication" : "refunds", applicationId: r.applicationId }); });
   if (!ok) return { error: moved };
   refresh(r.applicationId);
   return { ok: `${r.reference} is now being processed.` };
@@ -135,7 +136,7 @@ export async function completeRefund(_: DecState, fd: FormData): Promise<DecStat
   if (method !== "BANK_TRANSFER" && method !== "MOBILE_MONEY" && method !== "CASH") return { error: "Choose how the refund was paid." };
   const ok = await step(r, ["PROCESSING"], { state: "COMPLETED", status: "PAID", paidAmount: fromCents(cents), paidReference: reference, paidAt, payoutMethod: method, processedById: user.id },
     { actorId: user.id, action: "refund.paid", summary: `${user.name} paid refund ${r.reference}: ${money(fromCents(cents), r.currency ?? "USD")} (${reference})` },
-    async (tx) => { await notify(tx, { userId: r.clientId, title: "Refund paid", body: `${r.reference}: ${money(fromCents(cents), r.currency ?? "USD")}, reference ${reference}.`, link: "/portal/refunds" }); });
+    async (tx) => { await notify(tx, { userId: r.clientId, title: "Refund paid", body: `${r.reference}: ${money(fromCents(cents), r.currency ?? "USD")}, reference ${reference}.`, link: "/portal/refunds", section: r.kind === "REAPPLICATION" ? "reapplication" : "refunds", applicationId: r.applicationId }); });
   if (!ok) return { error: "Start processing the refund first, or refresh the page." };
   await emailUser(r.clientId, `Refund ${r.reference} paid`, `We have paid your refund of ${money(fromCents(cents), r.currency ?? "USD")} on ${raw} (reference ${reference}).`, "/portal/refunds");
   refresh(r.applicationId);

@@ -7,21 +7,22 @@ import { ActionForm } from "./action-form";
 
 type Inv = { id: string; number: string; description: string; currency: string; amount: string; status: string; payments: { amount: string }[] };
 
-export function RefundForm({ applicationId, invoices, allowReapplication, refundOpen, mode, clientName }: { applicationId: string; invoices: Inv[]; allowReapplication: boolean; refundOpen: boolean; mode: "client" | "paper"; clientName: string }) {
+export function RefundForm({ applicationId, invoices, allowReapplication, refundOpen, mode, clientName, fixedKind }: { applicationId: string; invoices: Inv[]; allowReapplication: boolean; refundOpen: boolean; mode: "client" | "paper"; clientName: string; fixedKind?: "REFUND" | "REAPPLICATION" }) {
+  if (fixedKind) { refundOpen = fixedKind === "REFUND"; allowReapplication = fixedKind === "REAPPLICATION"; }
   const paid = invoices.filter((i) => i.payments.length);
   const id = (k: string) => `${mode}-${k}-${applicationId}`;
   return (
     <ActionForm action={mode === "client" ? submitRefund : recordPaperRefund} submit={mode === "client" ? "Sign and submit" : "Record the paper form"} className="grid gap-3 sm:grid-cols-2">
       <input type="hidden" name="applicationId" value={applicationId} />
-      <fieldset className="sm:col-span-2"><legend className="label">What are you asking for?</legend>
+      {fixedKind ? <input type="hidden" name="kind" value={fixedKind} /> : <fieldset className="sm:col-span-2"><legend className="label">What are you asking for?</legend>
         <div className="flex flex-wrap gap-4 text-sm">
           {refundOpen && <label className="flex items-center gap-2"><input type="radio" name="kind" value="REFUND" defaultChecked /> A refund of money paid</label>}
           {allowReapplication && <label className="flex items-center gap-2"><input type="radio" name="kind" value="REAPPLICATION" defaultChecked={!refundOpen} /> Reapply instead of a refund (keep what was paid)</label>}
         </div>
-      </fieldset>
+      </fieldset>}
       <div className="sm:col-span-2"><label className="label" htmlFor={id("reason")}>Reason</label><textarea id={id("reason")} name="reason" rows={3} className="input" required maxLength={2000} /></div>
       {refundOpen && <>
-        <p className="text-xs muted sm:col-span-2">For a refund, fill in the payment and how to pay {mode === "client" ? "you" : "the client"}. Leave these as they are for a reapplication.</p>
+        {!fixedKind && <p className="text-xs muted sm:col-span-2">For a refund, fill in the payment and how to pay {mode === "client" ? "you" : "the client"}. Leave these as they are for a reapplication.</p>}
         <div><label className="label" htmlFor={id("inv")}>Payment to refund</label><select id={id("inv")} name="invoiceId" className="input">{paid.map((i) => <option key={i.id} value={i.id}>{i.number}: {i.description} ({money(fromCents(balanceOf({ ...i, status: "ISSUED" }).paid), i.currency)} paid)</option>)}</select></div>
         <div><label className="label" htmlFor={id("amt")}>Amount asked for</label><input id={id("amt")} name="amount" inputMode="decimal" className="input" defaultValue={paid[0] ? fromCents(balanceOf({ ...paid[0], status: "ISSUED" }).paid) : ""} /></div>
         <div><label className="label" htmlFor={id("pref")}>Payment reference you paid with (optional)</label><input id={id("pref")} name="paymentReference" className="input" maxLength={80} /></div>

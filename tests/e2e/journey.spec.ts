@@ -8,6 +8,7 @@ const stamp = Date.now();
 const who = { name: "Diane Mukamana", email: `diane-${stamp}@example.test`, phone: `+25072${String(stamp).slice(-7)}`, password: "Diane-Pass-2026!" };
 const PDF = path.join(__dirname, "sample.pdf");
 const today = () => new Date().toISOString().slice(0, 10);
+const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
 const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
 
 async function as(browser: Browser, email: string, password = PW) {
@@ -25,6 +26,7 @@ const alert = (p: Page, t: string | RegExp) => expect(p.getByRole("alert").filte
 const move = async (p: Page, stage: string) => { await p.getByLabel("Stage", { exact: true }).selectOption(stage); await p.getByRole("button", { name: "Save progress" }).click(); };
 
 test.describe.serial("existing client, visa-conditioned instalments and a third-instalment loan", () => {
+  test.describe.configure({ timeout: 90_000 });
   let appPath = "", activation = "";
 
   test("consultant registers an existing client at their real stage; the stage is checked against the records", async ({ browser }) => {
@@ -121,6 +123,18 @@ test.describe.serial("existing client, visa-conditioned instalments and a third-
     await move(k.page, "VISA_PROCESSING");
     await ok(k.page, "moved to Visa processing");
     await k.page.reload();
+    // Expected visa date: set, then updated with a time and an explanation.
+    const ve = k.page.locator("#visa");
+    await ve.getByLabel("Expected visa receiving date").fill(inDays(20));
+    await ve.getByRole("button", { name: "Save the expected date" }).click();
+    await ok(k.page, "Expected visa date saved");
+    await k.page.reload();
+    await ve.getByLabel("Expected visa receiving date").fill(inDays(25));
+    await ve.getByLabel("Expected time (optional)").fill("14:30");
+    await ve.getByLabel(/Explanation for the client/).fill("The embassy added an extra check.");
+    await ve.getByRole("button", { name: "Update the expected date" }).click();
+    await ok(k.page, "Expected visa date updated");
+    await k.page.reload();
     await move(k.page, "FINAL_COLLECTION");
     await alert(k.page, /after the visa is issued; that hasn't happened yet|Record the client's visa/);
     // Nothing was invoiced for the visa instalments yet.
@@ -135,6 +149,27 @@ test.describe.serial("existing client, visa-conditioned instalments and a third-
     await move(k.page, "FINAL_COLLECTION");
     await alert(k.page, /Instalment 2 .* must be paid/);
     await k.close();
+  });
+
+  test("the client sees the latest visa estimate, clearly marked as an estimate, and was notified", async ({ browser }) => {
+    const c = await as(browser, who.email, who.password);
+    await c.page.goto("/portal/applications");
+    await c.page.getByRole("link", { name: /FF-WA-/ }).first().click();
+    const v = c.page.locator("#visa");
+    await expect(v.getByTestId("visa-estimate")).toContainText("Estimated date, not confirmed");
+    await expect(v.getByTestId("visa-estimate")).toContainText("around 14:30 (Kigali time)");
+    await expect(v.getByTestId("visa-estimate")).toContainText("The embassy added an extra check.");
+    await expect(v.getByTestId("visa-estimate")).toContainText("Last updated");
+    // The notifications appear inside the Visa processing section, newest first, unread.
+    const updated = v.getByTestId("section-notice").filter({ hasText: "Expected visa date updated" });
+    await expect(updated).toHaveCount(1);
+    await expect(updated).toHaveAttribute("data-unread", "true");
+    await expect(v.getByTestId("section-notice").filter({ hasText: "Expected visa date" })).toHaveCount(2);
+    // A notification for one section isn't repeated in another.
+    await expect(c.page.locator("#invoices").getByText("Expected visa date")).toHaveCount(0);
+    await v.getByRole("button", { name: "Mark as read" }).click();
+    await expect(updated).not.toHaveAttribute("data-unread", "true");
+    await c.close();
   });
 
   test("loan option only on the third instalment; a pending loan isn't payment; Finance approval completes it", async ({ browser }) => {
@@ -189,5 +224,149 @@ test.describe.serial("existing client, visa-conditioned instalments and a third-
     await expect(c.page.getByTestId("loan-status").first()).toContainText("approved");
     await expect(c.page.getByTestId("remaining")).toHaveText("€0");
     await c.close(); await f.close(); await k.close();
+  });
+});
+
+test.describe.serial("final collection, completion, refund and reapplication", () => {
+  test.describe.configure({ timeout: 90_000 });
+  let appPath = "";
+  test("the client chooses to continue remotely; the consultant is notified and sees the choice", async ({ browser }) => {
+    const c = await as(browser, who.email, who.password);
+    await c.page.goto("/portal/applications");
+    await c.page.getByRole("link", { name: /FF-WA-/ }).first().click();
+    await c.page.waitForURL(/\/portal\/applications\/[^/]+$/);
+    appPath = new URL(c.page.url()).pathname.replace("/portal/", "/staff/");
+    const fin = c.page.locator("#final");
+    await expect(fin.getByRole("button", { name: "Visit the office" })).toBeVisible();
+    await fin.getByRole("button", { name: "Continue remotely" }).click();
+    await ok(c.page, "you'll continue remotely");
+    await c.page.reload();
+    await expect(c.page.getByTestId("final-choice")).toHaveText("Continue remotely");
+    const k = await as(browser, "consultant@firstflight.test");
+    await k.page.goto("/staff/notifications");
+    await expect(k.page.getByText("Client will continue remotely").first()).toBeVisible();
+    await k.page.goto("/staff/final-collection");
+    const card = k.page.getByTestId("final-client").filter({ hasText: who.name });
+    await expect(card.getByTestId("final-choice")).toHaveText("Continue remotely");
+    await expect(card.getByTestId("section-notices")).toHaveCount(0); // section notices sit at the top of the page
+    await expect(k.page.getByTestId("section-notices").first()).toContainText("Client will continue remotely");
+    await c.close(); await k.close();
+  });
+
+  test("the consultant uploads, the client previews, downloads and asks for a correction; the replacement keeps history", async ({ browser }) => {
+    const k = await as(browser, "consultant@firstflight.test");
+    await k.page.goto("/staff/final-collection");
+    const card = k.page.getByTestId("final-client").filter({ hasText: who.name });
+    await card.getByLabel("Document title").fill("Signed work contract");
+    await card.getByLabel("Category").selectOption("CONTRACT");
+    await card.getByLabel(/Description or instructions/).fill("Sign page 3 and keep a copy.");
+    await card.getByLabel("File (PDF, JPG or PNG)").setInputFiles(PDF);
+    await card.getByRole("button", { name: "Upload document" }).click();
+    await ok(k.page, /shared with the client/);
+
+    const c = await as(browser, who.email, who.password);
+    await c.page.goto(appPath.replace("/staff/", "/portal/"));
+    const fin = c.page.locator("#final");
+    await expect(fin.getByTestId("section-notice").first()).toContainText("New Final collection document");
+    const doc = fin.getByTestId("final-doc").first();
+    await expect(doc).toContainText("Signed work contract");
+    await expect(doc).toContainText("Employment or study contract");
+    await expect(doc).toContainText("Sign page 3 and keep a copy.");
+    await expect(doc.getByTestId("final-doc-status")).toHaveText("Available to client");
+    const href = await doc.getByRole("link", { name: "Download" }).getAttribute("href");
+    const r = await c.page.request.get(href!);
+    expect(r.headers()["content-type"]).toBe("application/pdf");
+    await doc.getByRole("link", { name: "Preview" }).click();
+    await expect(c.page.getByTestId("pdf-frame")).toBeVisible();
+    await c.page.goBack();
+    await c.page.reload();
+    await expect(fin.getByTestId("final-doc-status").first()).toHaveText("Viewed by client");
+    await fin.getByText("Something wrong with this document?").click();
+    await fin.getByPlaceholder("What needs correcting").fill("My name is misspelled on page 1.");
+    await fin.getByRole("button", { name: "Ask for a correction" }).click();
+    await ok(c.page, "asked to correct it");
+
+    await k.page.reload();
+    await expect(card.getByTestId("final-doc-status").first()).toHaveText("Correction required");
+    await card.getByText("Replace or update").click();
+    await card.getByLabel("File (PDF, JPG or PNG)").first().setInputFiles(PDF);
+    await card.getByRole("button", { name: "Upload new version" }).click();
+    await ok(k.page, /shared with the client/);
+    await k.page.reload();
+    await expect(card.getByTestId("final-doc-status").first()).toHaveText("Updated");
+    await expect(card.getByText("Earlier versions (1)")).toBeVisible();
+    // Other clients can't open it.
+    const other = await as(browser, "client@firstflight.test");
+    expect((await other.page.request.get(href!)).status()).toBe(404);
+    await k.close(); await c.close(); await other.close();
+  });
+
+  test("on completion, refund and reapplication appear at once but stay disabled until their own dates", async ({ browser }) => {
+    const k = await as(browser, "consultant@firstflight.test");
+    await k.page.goto(appPath);
+    await k.page.getByLabel("Status").selectOption("COMPLETED");
+    await k.page.getByRole("button", { name: "Save progress" }).click();
+    await ok(k.page, /marked completed/);
+    await k.close();
+    const c = await as(browser, who.email, who.password);
+    await c.page.goto(appPath.replace("/staff/", "/portal/"));
+    const refund = c.page.getByTestId("option-refund"), reapply = c.page.getByTestId("option-reapplication");
+    await expect(refund.getByTestId("option-status")).toHaveText("Waiting period");
+    await expect(reapply.getByTestId("option-status")).toHaveText("Waiting period");
+    await expect(refund).toContainText("You can submit this request in 30 days");
+    await expect(reapply).toContainText("You can submit this request in 15 days");
+    await expect(refund.getByRole("button", { name: "Request a refund" })).toBeDisabled();
+    await expect(reapply.getByRole("button", { name: "Request reapplication" })).toBeDisabled();
+    await c.close();
+  });
+
+  test("a corrected completion date recalculates each date independently and is audited", async ({ browser }) => {
+    const a = await as(browser, "admin@firstflight.test");
+    await a.page.goto(appPath);
+    await a.page.locator("#completion").getByText("Correct the completion date").click();
+    await a.page.locator("#completion").getByLabel("Real completion date").fill(daysAgo(20));
+    await a.page.locator("#completion").getByLabel("Reason", { exact: true }).fill("Completed at the office earlier");
+    await a.page.getByRole("button", { name: "Save corrected date" }).click();
+    await ok(a.page, "eligibility dates recalculated");
+    await a.page.goto("/staff/activity?q=" + encodeURIComponent("corrected the completion date"));
+    await expect(a.page.getByText(/corrected the completion date of FF-WA-/).first()).toBeVisible();
+
+    const c = await as(browser, who.email, who.password);
+    await c.page.goto(appPath.replace("/staff/", "/portal/"));
+    const refund = c.page.getByTestId("option-refund"), reapply = c.page.getByTestId("option-reapplication");
+    await expect(reapply.getByTestId("option-status")).toHaveText("Available"); // 15 days have passed
+    await expect(refund.getByTestId("option-status")).toHaveText("Waiting period"); // 30 haven't
+    await expect(refund).toContainText("You can submit this request in 10 days");
+    await expect(refund.getByRole("button", { name: "Request a refund" })).toBeDisabled();
+
+    // The server refuses an early request even from a page that showed it as available.
+    await reapply.getByText("Request reapplication").click();
+    await reapply.getByLabel("Reason").fill("I would like to apply for a different job in the Netherlands.");
+    await reapply.getByLabel(/I confirm this information is correct/).check();
+    await reapply.getByLabel("Type your full name to sign").fill(who.name);
+    await a.page.goto(appPath);
+    await a.page.locator("#completion").getByText("Correct the completion date").click();
+    await a.page.locator("#completion").getByLabel("Real completion date").fill(daysAgo(1));
+    await a.page.locator("#completion").getByLabel("Reason", { exact: true }).fill("Back to the real date");
+    await a.page.getByRole("button", { name: "Save corrected date" }).click();
+    await ok(a.page, "eligibility dates recalculated");
+    await reapply.getByRole("button", { name: "Sign and submit" }).click();
+    await alert(c.page, /Reapplication requests for this application open on .* \(in 14 days\)/);
+
+    // Back to 20 days ago: the reapplication goes through, and the refund can't run alongside it.
+    await a.page.reload();
+    await a.page.locator("#completion").getByText("Correct the completion date").click();
+    await a.page.locator("#completion").getByLabel("Real completion date").fill(daysAgo(20));
+    await a.page.locator("#completion").getByLabel("Reason", { exact: true }).fill("Confirmed with the office");
+    await a.page.getByRole("button", { name: "Save corrected date" }).click();
+    await ok(a.page, "eligibility dates recalculated");
+    await reapply.getByRole("button", { name: "Sign and submit" }).click();
+    await ok(c.page, /Reapplication request RF-\d{4}-\d{4} submitted/);
+    await c.page.reload();
+    await expect(reapply.getByTestId("option-status")).toHaveText("Submitted");
+    await expect(c.page.locator("#after-completion").getByTestId("section-notice").first()).toBeVisible();
+    await c.page.goto("/portal/refunds");
+    await expect(c.page.getByTestId("refund-row").first()).toContainText("Reapplication instead of a refund");
+    await a.close(); await c.close();
   });
 });

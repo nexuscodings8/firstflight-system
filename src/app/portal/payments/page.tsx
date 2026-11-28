@@ -1,3 +1,4 @@
+import { SectionNotices } from "@/components/section-notices";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { clientApps, totals } from "@/lib/client-data";
@@ -17,6 +18,7 @@ export default async function Payments() {
   return (
     <div className="grid gap-5">
       <h1 className="text-[clamp(26px,3vw,36px)]">Payments and balance</h1>
+      <SectionNotices user={user} sections={["payments"]} path="/portal/payments" limit={5} />
       <KpiRow>
         <Kpi label="Total service cost" value={t.total} icon="tag" />
         <Kpi label="Paid" value={t.paid} icon="wallet" tone={1} />

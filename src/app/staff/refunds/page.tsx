@@ -1,3 +1,4 @@
+import { SectionNotices } from "@/components/section-notices";
 import Link from "next/link";
 import { and, desc, eq, inArray, type SQL } from "drizzle-orm";
 import { db, schema as s } from "@/db";
@@ -38,6 +39,7 @@ export default async function Refunds({ searchParams }: { searchParams: Promise<
         </div>
         <nav aria-label="Filter requests" className="flex gap-1 text-sm">{tabs.map(([k, l]) => <Link key={k} href={`/staff/refunds?show=${k}`} aria-current={tab === k ? "page" : undefined} className={`rounded-lg px-3 py-1.5 font-medium ${tab === k ? "bg-brand text-white" : "bg-white hover:bg-mist"}`}>{l}</Link>)}</nav>
       </div>
+      <SectionNotices user={user} sections={["refunds", "reapplication"]} path="/staff/refunds" limit={5} />
       {rows.map((r) => {
         const cur = r.currency ?? "USD";
         const canConsult = r.state === "SUBMITTED" && (user.role === "ADMIN" || (consultant && r.application.consultantId === user.id));

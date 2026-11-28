@@ -1,3 +1,4 @@
+import { SectionNotices } from "@/components/section-notices";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { clientApps } from "@/lib/client-data";
@@ -18,6 +19,7 @@ export default async function Documents() {
   return (
     <div className="grid gap-5">
       <div><h1 className="text-[clamp(26px,3vw,36px)]">Document center</h1><p className="mt-1 muted">Every document for every application. PDF, JPG, PNG or Word, up to 10 MB each.</p></div>
+      <SectionNotices user={user} sections={["offer", "final", "documents", "visa"]} path="/portal/documents" limit={5} />
       {apps.map((a) => (
         <section key={a.id} className="card p-5" aria-labelledby={`dc-${a.id}`}>
           <h2 id={`dc-${a.id}`} className="text-lg"><Link className="text-brand underline" href={`/portal/applications/${a.id}`}>{a.reference}</Link> · {(a.selection as { title: string }).title}</h2>

@@ -1,3 +1,4 @@
+import { SectionNotices } from "@/components/section-notices";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { clientApps } from "@/lib/client-data";
@@ -20,6 +21,8 @@ export default async function Refunds() {
         <p className="mt-1 max-w-2xl muted">Every request is reviewed by your consultant, then Finance, then an administrator. You can follow each step here. You can also ask to reapply instead of a refund, keeping what you have paid.</p>
         <a className="mt-2 inline-block text-sm font-semibold text-brand underline" href="/forms/refund">Download the paper refund form (PDF)</a>
       </div>
+      <section aria-labelledby="rn-h"><h2 id="rn-h" className="sr-only">Refund updates</h2><SectionNotices user={user} sections={["refunds"]} path="/portal/refunds" limit={4} /></section>
+      <section aria-labelledby="pn-h"><h2 id="pn-h" className="sr-only">Reapplication updates</h2><SectionNotices user={user} sections={["reapplication"]} path="/portal/refunds" limit={4} /></section>
       <ul className="grid gap-3">
         {rows.map(({ r, a }) => (
           <li key={r.id} className="card p-5" data-testid="refund-row">

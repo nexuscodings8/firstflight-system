@@ -14,7 +14,7 @@ import { ActionForm } from "./action-form";
 
 const Badge = ({ map, k }: { map: Record<string, [string, string]>; k: string }) => <span className={`badge ${map[k][1]}`}>{map[k][0]}</span>;
 
-export function RequestsPanel({ app, mode, canDecide = false, seeRefunds = false, refund }: { app: FullApplication; mode: "client" | "staff"; canDecide?: boolean; seeRefunds?: boolean; refund?: RefundInfo }) {
+export function RequestsPanel({ app, mode, canDecide = false, seeRefunds = false, refund, notices }: { app: FullApplication; mode: "client" | "staff"; canDecide?: boolean; seeRefunds?: boolean; refund?: RefundInfo; notices?: React.ReactNode }) {
   const changes = app.amendments.filter((a) => a.source === "CLIENT");
   const openRefund = app.refunds.find((r) => OPEN_STATES.includes(r.state));
   const showRefunds = mode === "client" || seeRefunds;
@@ -22,6 +22,7 @@ export function RequestsPanel({ app, mode, canDecide = false, seeRefunds = false
   return (
     <section className="card p-6" aria-labelledby="rq-h">
       <h2 id="rq-h" className="text-xl">{mode === "client" ? "Refunds and changes" : "Change requests and refunds"}</h2>
+      {notices}
 
       {changes.length > 0 && (
         <ul className="mt-3 divide-y divide-line">

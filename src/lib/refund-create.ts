@@ -6,7 +6,7 @@ import { nextRef } from "./refs";
 import { balanceOf, fromCents, parseAmount } from "./finance";
 import { money } from "./format";
 import { getRefundPolicy } from "./settings";
-import { refundEligibility } from "./refund-policy";
+import { afterCompletion, refundEligibility } from "./refund-policy";
 import { OPEN_STATES, firstPaymentAt } from "./refunds";
 import { sameName } from "./contracts";
 
@@ -22,10 +22,19 @@ export async function createRefundRequest(o: { appId: string; fd: FormData; acto
   if (!app) return { error: "Application not found." };
   const kind = str(fd, "kind", 20) === "REAPPLICATION" ? "REAPPLICATION" : "REFUND";
   const policy = await getRefundPolicy(app.service);
-  const elig = refundEligibility(policy, firstPaymentAt(app.invoices));
-  if (elig.state === "NO_PAYMENT") return { error: elig.text };
-  if (kind === "REFUND" && elig.state !== "OPEN") return { error: elig.text };
   if (kind === "REAPPLICATION" && !policy.allowReapplication) return { error: "Reapplication instead of a refund isn't offered for this service." };
+  if (app.status === "COMPLETED") {
+    // After completion each option opens on its own date (completion date + its waiting period). Checked here, so
+    // an early request sent straight to the server is refused just like the disabled button.
+    if (!app.completedAt) return { error: "The completion date isn't recorded. Ask an administrator to set it." };
+    const w = afterCompletion(app.completedAt, kind === "REFUND" ? policy.refundAfterCompletionDays : policy.reapplyAfterCompletionDays);
+    if (w.state === "WAITING") return { error: `${kind === "REFUND" ? "Refund" : "Reapplication"} requests for this application open on ${w.opensOn.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "Africa/Kigali" })} (in ${w.daysLeft} day${w.daysLeft === 1 ? "" : "s"}).` };
+    if (kind === "REFUND" && !firstPaymentAt(app.invoices)) return { error: "Refunds apply to approved payments. There's none on this application." };
+  } else {
+    const elig = refundEligibility(policy, firstPaymentAt(app.invoices));
+    if (elig.state === "NO_PAYMENT") return { error: elig.text };
+    if (kind === "REFUND" && elig.state !== "OPEN") return { error: elig.text };
+  }
   const reason = str(fd, "reason");
   if (reason.length < 10) return { error: "Explain the reason (at least a sentence)." };
   const declarationName = str(fd, "declarationName", 120);
@@ -62,8 +71,8 @@ export async function createRefundRequest(o: { appId: string; fd: FormData; acto
     const what = kind === "REFUND" ? "refund" : "reapplication";
     await logActivity(tx, { actorId: actor.id, action: `refund.submitted`, entityType: "refund", entityId: r.id, applicationId: app.id, summary: `${actor.name} submitted ${what} request ${reference} for ${app.reference}${o.source === "PAPER" ? " (paper form uploaded)" : ""}` });
     const reviewLink = "/staff/refunds";
-    await notify(tx, app.consultantId ? { userId: app.consultantId, title: `New ${what} request`, body: `${reference} on ${app.reference} needs your review.`, link: reviewLink } : { role: "ADMIN", title: `New ${what} request`, body: `${reference} on ${app.reference} (no consultant assigned) needs a review.`, link: reviewLink });
-    if (o.source === "PAPER") await notify(tx, { userId: app.clientId, title: `Your ${what} request was recorded`, body: `${reference}: we've recorded your paper form. Track it in your portal.`, link: "/portal/refunds" });
+    await notify(tx, app.consultantId ? { userId: app.consultantId, title: `New ${what} request`, body: `${reference} on ${app.reference} needs your review.`, link: reviewLink, section: kind === "REAPPLICATION" ? "reapplication" : "refunds", applicationId: app.id } : { role: "ADMIN", title: `New ${what} request`, body: `${reference} on ${app.reference} (no consultant assigned) needs a review.`, link: reviewLink, section: kind === "REAPPLICATION" ? "reapplication" : "refunds", applicationId: app.id });
+    if (o.source === "PAPER") await notify(tx, { userId: app.clientId, title: `Your ${what} request was recorded`, body: `${reference}: we've recorded your paper form. Track it in your portal.`, link: "/portal/refunds", section: kind === "REAPPLICATION" ? "reapplication" : "refunds", applicationId: app.id });
     return { ok: `${kind === "REFUND" ? "Refund" : "Reapplication"} request ${reference} submitted. You can track every step here.` };
   });
 }

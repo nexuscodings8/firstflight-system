@@ -1,3 +1,4 @@
+import { SectionNotices } from "@/components/section-notices";
 import Link from "next/link";
 import { asc, desc, eq, inArray } from "drizzle-orm";
 import { db, schema as s } from "@/db";
@@ -11,7 +12,7 @@ import { reviewSubmission } from "../verify-actions";
 export const metadata = { title: "Payments to verify" };
 
 export default async function Verify({ searchParams }: { searchParams: Promise<{ show?: string }> }) {
-  await requireUser(["FINANCE", "ADMIN"], "/staff/finance/verify");
+  const user = await requireUser(["FINANCE", "ADMIN"], "/staff/finance/verify");
   const done = (await searchParams).show === "done";
   const rows = await db.query.paymentSubmissions.findMany({
     where: done ? inArray(s.paymentSubmissions.status, ["APPROVED", "REJECTED"]) : eq(s.paymentSubmissions.status, "PENDING"),
@@ -22,6 +23,7 @@ export default async function Verify({ searchParams }: { searchParams: Promise<{
     <div className="grid gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div><h1 className="text-[clamp(26px,3vw,36px)]">Payments to verify</h1><p className="mt-1 max-w-2xl text-sm muted">Check each payment against your bank, mobile money or cash records before approving. Approving issues the receipt and unlocks the application&apos;s next stage; nothing counts as paid before that.</p></div>
+      <SectionNotices user={user} sections={["payments"]} path="/staff/finance/verify" limit={5} />
         <nav aria-label="Filter" className="flex gap-1 text-sm">{[["", "Waiting"], ["done", "Reviewed"]].map(([k, t]) => <Link key={t} href={`/staff/finance/verify${k ? "?show=done" : ""}`} aria-current={done === !!k ? "page" : undefined} className={`rounded-lg px-3 py-1.5 font-medium ${done === !!k ? "bg-brand text-white" : "bg-white hover:bg-mist"}`}>{t}</Link>)}</nav>
       </div>
       {rows.map((x) => (

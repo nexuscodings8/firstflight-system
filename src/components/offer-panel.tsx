@@ -12,7 +12,7 @@ function Box({ open, title, children }: { open: boolean; title: string; children
 }
 const at = (st: string) => STAGES.indexOf(st as (typeof STAGES)[number]);
 
-export function OfferPanel({ app, mode, canWork = false }: { app: FullApplication; mode: "client" | "staff"; canWork?: boolean }) {
+export function OfferPanel({ app, mode, canWork = false, notices }: { app: FullApplication; mode: "client" | "staff"; canWork?: boolean; notices?: React.ReactNode }) {
   const offer = app.caseFiles.filter((f) => f.kind === "OFFER_LETTER");
   const visa = app.caseFiles.filter((f) => f.kind === "VISA");
   const earlier = app.caseFiles.filter((f) => f.kind === "OTHER");
@@ -31,6 +31,7 @@ export function OfferPanel({ app, mode, canWork = false }: { app: FullApplicatio
     <section id="offer" className="card p-6" aria-labelledby="of-h">
       <h2 id="of-h" className="text-xl">{needsOffer(app.service) ? "Offer letter, visa and documents" : "Visa and documents"}</h2>
       <p className="mt-1 text-sm muted">Current stage: {STAGE_LABEL[app.stage]}</p>
+      {notices}
       {offer.length + visa.length > 0 && <ul className="mt-2 divide-y divide-line">{[...offer, ...visa].map((f) => <FileRow key={f.id} f={f} />)}</ul>}
       {earlier.length > 0 && <><h3 className="mt-4 text-base">Earlier documents (from before the platform)</h3><ul className="divide-y divide-line">{earlier.map((f) => <FileRow key={f.id} f={f} />)}</ul></>}
       {mode === "staff" && needsOffer(app.service) && offerStage && !offer.length && <p className="mt-2 text-sm">No offer letter yet. Instalments payable after the offer letter are invoiced when it&apos;s uploaded.</p>}

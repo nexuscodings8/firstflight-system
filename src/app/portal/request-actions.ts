@@ -25,7 +25,8 @@ export async function submitRefund(_: ReqState, fd: FormData): Promise<ReqState>
   const file = await storeUpload(fd.get("supporting"), { required: false, label: "the supporting document", imagesAndPdfOnly: true });
   if (isErr(file)) return { error: file.error };
   const res = await createRefundRequest({ appId: app.id, fd, actor: user, source: "ONLINE", file });
-  revalidatePath(`/portal/applications/${app.id}`); revalidatePath("/portal/refunds");
+  // Refresh only on success, so a refusal (e.g. too early) stays on screen next to the form.
+  if ("ok" in res) { revalidatePath(`/portal/applications/${app.id}`); revalidatePath("/portal/refunds"); }
   return res;
 }
 

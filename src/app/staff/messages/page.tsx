@@ -1,3 +1,4 @@
+import { SectionNotices } from "@/components/section-notices";
 import Link from "next/link";
 import { and, asc, desc, eq, ilike, inArray, ne } from "drizzle-orm";
 import { db, schema as s } from "@/db";
@@ -31,6 +32,7 @@ export default async function Messages({ searchParams }: { searchParams: Promise
     <div className="grid gap-5">
       <AutoRefresh seconds={15} />
       <div><h1 className="text-[clamp(26px,3vw,36px)]">Messages</h1><p className="mt-1 max-w-2xl text-sm muted">Internal staff conversations. Clients never see these. Mention someone with @ and their name to notify them.</p></div>
+      <SectionNotices user={user} sections={["messages"]} path="/staff/messages" limit={5} />
       <form action="/staff/messages" role="search" className="flex flex-wrap gap-2">
         <label className="sr-only" htmlFor="msg-q">Search conversations</label>
         <input id="msg-q" name="q" defaultValue={q} className="input max-w-md flex-1" placeholder="Search previous conversations" />

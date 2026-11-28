@@ -5,6 +5,7 @@ import type { CurrentUser } from "./auth";
 import { canViewApplication, canViewDocuments, canWorkOnCase } from "./permissions";
 import { PAYMENT_METHOD_LABEL } from "./finance";
 import { dateTime, money } from "./format";
+import { FINAL_CATEGORIES } from "./final-collection";
 
 export type Viewable = {
   title: string; fileName: string; mime: string; src: string; download: string; back: { href: string; label: string };
@@ -53,11 +54,14 @@ export async function loadViewable(user: CurrentUser, kind: string, id: string):
     if (!f || !canViewApplication(user, f.application)) return null;
     if (f.kind === "PAYMENT_EVIDENCE" && user.role !== "FINANCE" && user.role !== "ADMIN") return null;
     // The client opening their offer letter or visa is recorded (the first time).
-    if (user.role === "CLIENT" && !f.clientViewedAt) await db.update(s.caseFiles).set({ clientViewedAt: new Date() }).where(eq(s.caseFiles.id, f.id));
+    if (f.kind === "FINAL_DOC" && user.role === "CLIENT" && f.status === "UPLOADED") return null; // not shared yet
+    if (user.role === "CLIENT" && !f.clientViewedAt) await db.update(s.caseFiles).set({ clientViewedAt: new Date(), ...(f.kind === "FINAL_DOC" && (f.status === "AVAILABLE" || f.status === "UPDATED") ? { status: "VIEWED" } : {}) }).where(eq(s.caseFiles.id, f.id));
+    else if (user.role === "CLIENT" && f.kind === "FINAL_DOC" && (f.status === "AVAILABLE" || f.status === "UPDATED")) await db.update(s.caseFiles).set({ status: "VIEWED" }).where(eq(s.caseFiles.id, f.id));
     const meta: [string, string][] = [["Application", f.application.reference], ["Uploaded", `${dateTime(f.createdAt)}${user.role === "CLIENT" ? "" : ` by ${f.uploadedBy.name}`}`]];
     if (f.issuedOn) meta.push([f.kind === "VISA" ? "Visa issued" : "Dated", dateTime(f.issuedOn).split(",")[0]]);
     if (f.historical) meta.push(["Source", "From before the platform"]);
-    if (f.note && user.role !== "CLIENT") meta.push(["Note", f.note]);
+    if (f.category) meta.push(["Category", FINAL_CATEGORIES[f.category] ?? f.category]);
+    if (f.note && (user.role !== "CLIENT" || f.kind === "FINAL_DOC")) meta.push([f.kind === "FINAL_DOC" ? "Description" : "Note", f.note]);
     if (f.clientViewedAt && user.role !== "CLIENT") meta.push(["Client opened it", dateTime(f.clientViewedAt)]);
     return { title: f.title, fileName: f.fileName, mime: f.mimeType, src: `/api/files/case/${f.id}?inline=1`, download: `/api/files/case/${f.id}`, back: appBack(f.application.id, f.application.reference), meta };
   }

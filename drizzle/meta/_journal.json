@@ -36,6 +36,13 @@
       "when": 1795800320257,
       "tag": "0004_getting_offer",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1795874471709,
+      "tag": "0005_final_collection",
+      "breakpoints": true
     }
   ]
 }

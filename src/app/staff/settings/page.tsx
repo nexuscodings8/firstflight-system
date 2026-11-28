@@ -22,6 +22,8 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           <input type="hidden" name="service" value={sv} />
           <div><label className="label" htmlFor={`a-${sv}`}>Refund requests open after (days from first approved payment)</label><input id={`a-${sv}`} name="eligibleAfterDays" type="number" min={0} max={730} defaultValue={pol[sv].eligibleAfterDays} className="input" /></div>
           <div><label className="label" htmlFor={`w-${sv}`}>…and stay open for (days; 0 = no end)</label><input id={`w-${sv}`} name="windowDays" type="number" min={0} max={1825} defaultValue={pol[sv].windowDays} className="input" /></div>
+          <div><label className="label" htmlFor={`rc-${sv}`}>After completion: refund waiting period (days)</label><input id={`rc-${sv}`} name="refundAfterCompletionDays" type="number" min={0} max={730} defaultValue={pol[sv].refundAfterCompletionDays} className="input" /></div>
+          <div><label className="label" htmlFor={`pc-${sv}`}>After completion: reapplication waiting period (days)</label><input id={`pc-${sv}`} name="reapplyAfterCompletionDays" type="number" min={0} max={730} defaultValue={pol[sv].reapplyAfterCompletionDays} className="input" /></div>
           <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" name="allowReapplication" defaultChecked={pol[sv].allowReapplication} className="size-4 accent-brand" /> Clients may ask to reapply instead of a refund</label>
           <div className="sm:col-span-2"><label className="label" htmlFor={`t-${sv}`}>Policy text shown to clients</label><textarea id={`t-${sv}`} name="terms" rows={3} defaultValue={pol[sv].terms} className="input" maxLength={1500} /></div>
         </ActionForm>

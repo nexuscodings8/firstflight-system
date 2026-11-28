@@ -1,4 +1,5 @@
 import "server-only";
+import { applicationOf, sectionOf, type Section } from "./notice-sections";
 import { db, schema } from "@/db";
 import type { Role } from "./permissions";
 
@@ -14,6 +15,8 @@ export async function logActivity(x: Exec, a: {
 }
 
 /** Notify one person (userId) or a whole department (role). */
-export async function notify(x: Exec, n: { userId?: string; role?: Role; title: string; body: string; link?: string }) {
-  await x.insert(schema.notifications).values({ userId: n.userId ?? null, role: n.role ?? null, title: n.title, body: n.body, link: n.link ?? null });
+export async function notify(x: Exec, n: { userId?: string; role?: Role; title: string; body: string; link?: string; section?: Section; applicationId?: string | null }) {
+  // Each notification is filed under the section it belongs to (and its application), to be shown in context.
+  await x.insert(schema.notifications).values({ userId: n.userId ?? null, role: n.role ?? null, title: n.title, body: n.body, link: n.link ?? null,
+    section: n.section ?? sectionOf(n.link, n.title), applicationId: n.applicationId ?? applicationOf(n.link) });
 }

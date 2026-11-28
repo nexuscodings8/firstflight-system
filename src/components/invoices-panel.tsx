@@ -125,7 +125,7 @@ function ScheduleBox({ app, rules, finance, client }: { app: FullApplication; ru
   );
 }
 
-export function InvoicesPanel({ app, mode, rules = [] }: { app: FullApplication; mode: "client" | "finance" | "summary"; rules?: RuleChoice[] }) {
+export function InvoicesPanel({ app, mode, rules = [], notices }: { app: FullApplication; mode: "client" | "finance" | "summary"; rules?: RuleChoice[]; notices?: React.ReactNode }) {
   if (mode === "summary") return <Clearance app={app} />;
   const invs = [...app.invoices].sort((a, b) => +a.createdAt - +b.createdAt);
   const subs = app.paymentSubmissions ?? [];
@@ -142,6 +142,7 @@ export function InvoicesPanel({ app, mode, rules = [] }: { app: FullApplication;
         <h2 id="inv-h" className="text-xl">Invoices and payments</h2>
         {open.length > 0 && <p className="text-sm font-semibold">{dueText ? <>Balance due: <span className="text-amber-800">{dueText}</span></> : <span className="text-emerald-700">Fully paid</span>}</p>}
       </div>
+      {notices}
       <ScheduleBox app={app} rules={rules} finance={mode === "finance"} client={mode === "client"} />
       {!invs.length && <p className="mt-2 text-sm muted">{mode === "client" ? "No invoices yet. You're invoiced for each instalment only when it becomes payable." : "No invoices on this application yet."}</p>}
       <ul className="mt-3 divide-y divide-line">

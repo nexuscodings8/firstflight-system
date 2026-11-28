@@ -29,10 +29,12 @@ export async function saveRefundPolicy(_: SetState, fd: FormData): Promise<SetSt
   const after = Number(str(fd, "eligibleAfterDays", 5)), win = Number(str(fd, "windowDays", 5));
   if (!Number.isInteger(after) || after < 0 || after > 730) return { error: "Days before refunds open must be a whole number from 0 to 730." };
   if (!Number.isInteger(win) || win < 0 || win > 1825) return { error: "Days refunds stay open must be a whole number from 0 (no end) to 1825." };
-  const v = { eligibleAfterDays: after, windowDays: win, allowReapplication: fd.get("allowReapplication") === "on", terms: str(fd, "terms", 1500) || "Refunds follow the terms of your signed service contract." };
+  const ra = Number(str(fd, "refundAfterCompletionDays", 5)), pa = Number(str(fd, "reapplyAfterCompletionDays", 5));
+  if (![ra, pa].every((x) => Number.isInteger(x) && x >= 0 && x <= 730)) return { error: "Waiting periods after completion must be whole numbers of days from 0 to 730." };
+  const v = { eligibleAfterDays: after, windowDays: win, allowReapplication: fd.get("allowReapplication") === "on", terms: str(fd, "terms", 1500) || "Refunds follow the terms of your signed service contract.", refundAfterCompletionDays: ra, reapplyAfterCompletionDays: pa };
   const before = await getRefundPolicy(service);
   await saveSetting(`refund_policy:${service}`, v, me.id);
-  await logActivity(db, { actorId: me.id, action: "settings.refund_policy", entityType: "settings", entityId: `refund_policy:${service}`, summary: `${me.name} changed the ${SERVICE_LABEL[service]} refund policy (opens after ${after} days, open for ${win || "unlimited"} days)`, changes: { policy: [before, v] } });
+  await logActivity(db, { actorId: me.id, action: "settings.refund_policy", entityType: "settings", entityId: `refund_policy:${service}`, summary: `${me.name} changed the ${SERVICE_LABEL[service]} refund policy (opens after ${after} days, open for ${win || "unlimited"} days; after completion: refund after ${ra} days, reapplication after ${pa} days)`, changes: { policy: [before, v] } });
   revalidatePath("/staff/settings");
   return { ok: `${SERVICE_LABEL[service]} refund policy saved.` };
 }

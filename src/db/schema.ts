@@ -198,6 +198,9 @@ export const applications = pgTable("applications", {
   originalStartDate: timestamp("original_start_date", { withTimezone: true }), // existing clients: when the service really began
   importedStageReachedAt: timestamp("imported_stage_reached_at", { withTimezone: true }), // existing clients: when they reached the recorded stage
   importNote: text("import_note"),
+  completedAt: timestamp("completed_at", { withTimezone: true }), // when the application was completed; starts refund/reapplication waiting periods
+  finalCollectionMode: text("final_collection_mode"), // OFFICE | REMOTE: the client's choice at Final collection
+  finalCollectionChosenAt: timestamp("final_collection_chosen_at", { withTimezone: true }),
   stage: stage("stage").notNull().default("SUBMITTED"),
   status: applicationStatus("status").notNull().default("ACTIVE"),
   createdAt: created(),
@@ -549,8 +552,26 @@ export const caseFiles = pgTable("case_files", {
   mimeType: text("mime_type").notNull(),
   uploadedById: text("uploaded_by_id").notNull().references(() => users.id),
   clientViewedAt: timestamp("client_viewed_at", { withTimezone: true }),
+  // Final collection documents: category, status and version history (a replacement points at the file it replaces).
+  category: text("category"),
+  status: text("status"), // UPLOADED | AVAILABLE | VIEWED | CORRECTION_REQUIRED | UPDATED
+  correctionNote: text("correction_note"),
+  replacesId: text("replaces_id"),
+  supersededAt: timestamp("superseded_at", { withTimezone: true }),
   createdAt: created(),
 }, (t) => [index("case_files_app_idx").on(t.applicationId, t.kind)]);
+
+// The consultant's estimate of when the visa will be received. Every update is kept; the latest is shown.
+// An estimate never marks the visa as received.
+export const visaEstimates = pgTable("visa_estimates", {
+  id: id(),
+  applicationId: text("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  expectedDate: text("expected_date").notNull(), // YYYY-MM-DD, Kigali time
+  expectedTime: text("expected_time"), // HH:MM, optional
+  note: text("note"),
+  setById: text("set_by_id").notNull().references(() => users.id),
+  createdAt: created(),
+}, (t) => [index("visa_estimates_app_idx").on(t.applicationId, t.createdAt)]);
 
 // Payments made before the platform: recorded by staff, counted only once Finance validates them.
 export const historicalPayments = pgTable("historical_payments", {
@@ -616,6 +637,8 @@ export const notifications = pgTable("notifications", {
   title: text("title").notNull(),
   body: text("body").notNull(),
   link: text("link"),
+  section: text("section"), // where it's shown in context: payments, contracts, offer, visa, final, appointments, refunds, reapplication, messages, …
+  applicationId: text("application_id"),
   readAt: timestamp("read_at", { withTimezone: true }),
   createdAt: created(),
 }, (t) => [index("notifications_user_idx").on(t.userId, t.readAt), index("notifications_role_idx").on(t.role, t.readAt)]);
@@ -740,6 +763,7 @@ export const applicationsRelations = relations(applications, ({ one, many }) => 
   assignmentRequests: many(assignmentRequests),
   paymentSubmissions: many(paymentSubmissions),
   caseFiles: many(caseFiles),
+  visaEstimates: many(visaEstimates),
   historicalPayments: many(historicalPayments),
   loanRequests: many(loanRequests),
 }));
@@ -814,6 +838,10 @@ export const conversationsRelations = relations(conversations, ({ one, many }) =
 export const conversationMembersRelations = relations(conversationMembers, ({ one }) => ({
   conversation: one(conversations, { fields: [conversationMembers.conversationId], references: [conversations.id] }),
   user: one(users, { fields: [conversationMembers.userId], references: [users.id] }),
+}));
+export const visaEstimatesRelations = relations(visaEstimates, ({ one }) => ({
+  application: one(applications, { fields: [visaEstimates.applicationId], references: [applications.id] }),
+  setBy: one(users, { fields: [visaEstimates.setById], references: [users.id] }),
 }));
 export const caseFilesRelations = relations(caseFiles, ({ one }) => ({
   application: one(applications, { fields: [caseFiles.applicationId], references: [applications.id] }),

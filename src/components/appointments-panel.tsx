@@ -6,12 +6,13 @@ import type { Office } from "@/lib/settings";
 import { SERVICE_LABEL, STAGES, STAGE_LABEL, kigaliTime } from "@/lib/format";
 import { ActionForm } from "./action-form";
 
-export function AppointmentsPanel({ app, mode, canWork = false, office }: { app: FullApplication; mode: "client" | "staff"; canWork?: boolean; office?: Office }) {
+export function AppointmentsPanel({ app, mode, canWork = false, office, notices }: { app: FullApplication; mode: "client" | "staff"; canWork?: boolean; office?: Office; notices?: React.ReactNode }) {
   const list = [...app.appointments].sort((a, b) => +b.startsAt - +a.startsAt);
   if (mode === "client" && !list.length) return null;
   return (
     <section id="appointments" className="card p-6" aria-labelledby="ap-h">
       <h2 id="ap-h" className="text-xl">Appointments</h2>
+      {notices}
       {!list.length && <p className="mt-2 text-sm muted">No office appointments yet.</p>}
       <ul className="mt-3 space-y-3">
         {list.map((a) => {

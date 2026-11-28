@@ -19,6 +19,7 @@ export const loadApplication = (id: string) =>
       contracts: { orderBy: [asc(s.contracts.createdAt)], with: { uploadedBy: { columns: { name: true } } } },
       appointments: { orderBy: [asc(s.appointments.startsAt)], with: { consultant: { columns: { name: true, email: true, phone: true } } } },
       caseFiles: { orderBy: [asc(s.caseFiles.createdAt)], with: { uploadedBy: { columns: { name: true } } } },
+      visaEstimates: { orderBy: [desc(s.visaEstimates.createdAt)], with: { setBy: { columns: { name: true } } } },
       historicalPayments: { orderBy: [asc(s.historicalPayments.paidAt)] },
       loanRequests: { orderBy: [asc(s.loanRequests.createdAt)] },
     },
